@@ -19,7 +19,7 @@ class NoModelSelectedError(Exception):
 
 
 class ModelJoinByBonesOperator(bpy.types.Operator):
-    bl_idname = "mmd_tools_local.model_join_by_bones"
+    bl_idname = "mmd_tools.model_join_by_bones"
     bl_label = "Model Join by Bones"
     bl_description = "Join multiple MMD models into one.\n\nWARNING: To align models before joining, only adjust the root (cross under the model) transformation. Do not move armatures, meshes, rigid bodies, or joints directly as they will not move together.\n\nIMPORTANT: Don't use any of the 'Assembly' functions before using this function. This function requires the models to be in a clean state."
     bl_options = {"REGISTER", "UNDO"}
@@ -107,7 +107,7 @@ class ModelJoinByBonesOperator(bpy.types.Operator):
 
 
 class ModelSeparateByBonesOperator(bpy.types.Operator):
-    bl_idname = "mmd_tools_local.model_separate_by_bones"
+    bl_idname = "mmd_tools.model_separate_by_bones"
     bl_label = "Model Separate by Bones"
     bl_description = "Separate MMD model into multiple models based on selected bones.\n\nWARNING: This operation will split meshes, armatures, rigid bodies and joints. To move models before separating, only adjust the root (cross under the model) transformation. Do not move armatures, meshes, rigid bodies, or joints directly before separating as they will not move together.\n\nIMPORTANT: Don't use any of the 'Assembly' functions before using this function. This function requires the model to be in a clean state."
     bl_options = {"REGISTER", "UNDO"}
@@ -185,11 +185,11 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
 
         # Reset object visibility
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools_local.reset_object_visibility()
+        bpy.ops.mmd_tools.reset_object_visibility()
 
         # Clean additional transform
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools_local.clean_additional_transform()
+        bpy.ops.mmd_tools.clean_additional_transform()
 
         # Create new separate model first
         separate_model: Model = Model.create(mmd_root_object.mmd_root.name, mmd_root_object.mmd_root.name_e, mmd_scale, obj_name=mmd_root_object.name, add_root_bone=False)
@@ -233,18 +233,16 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
         separate_mesh_objects: List[bpy.types.Object] = []
         model2separate_mesh_objects: Dict[bpy.types.Object, bpy.types.Object] = {}
         if len(mmd_model_mesh_objects) > 0:
-            # Find a single unique attribute name that doesn't conflict with any existing attributes.
-            all_attribute_names = {attr.name for obj in mmd_model_mesh_objects for attr in obj.data.attributes}
-            temp_normal_name = "mmd_temp_normal"
-            i = 0
-            while temp_normal_name in all_attribute_names:
-                temp_normal_name = f"mmd_temp_normal.{i:03d}"
-                i += 1
-
-            # Backup custom normals to the unique temporary attribute.
+            # Backup custom normals to the temporary attribute.
             for mesh_obj in mmd_model_mesh_objects:
                 mesh_data = mesh_obj.data
-                temp_normal_attr = mesh_data.attributes.new(temp_normal_name, "FLOAT_VECTOR", "CORNER")
+
+                # Remove existing attribute if it exists to avoid Blender auto-renaming
+                existing_attr = mesh_data.attributes.get("mmd_normal")
+                if existing_attr is not None:
+                    mesh_data.attributes.remove(existing_attr)
+
+                temp_normal_attr = mesh_data.attributes.new("mmd_normal", "FLOAT_VECTOR", "CORNER")
                 normals_data = np.empty(len(mesh_data.loops) * 3, dtype=np.float32)
                 mesh_data.loops.foreach_get("normal", normals_data)
                 temp_normal_attr.data.foreach_set("vector", normals_data)
@@ -267,7 +265,7 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
             all_mesh_objects = list(mmd_model_mesh_objects) + list(separate_mesh_objects)
             for mesh_obj in all_mesh_objects:
                 mesh_data = mesh_obj.data
-                temp_normal_attr = mesh_data.attributes.get(temp_normal_name)
+                temp_normal_attr = mesh_data.attributes.get("mmd_normal")
                 if not temp_normal_attr:
                     continue
                 normals_data = np.empty(len(mesh_data.loops) * 3, dtype=np.float32)
@@ -328,9 +326,9 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
 
         # Apply additional transform
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools_local.apply_additional_transform()
+        bpy.ops.mmd_tools.apply_additional_transform()
         FnContext.set_active_and_select_single_object(context, separate_root_object)
-        bpy.ops.mmd_tools_local.apply_additional_transform()
+        bpy.ops.mmd_tools.apply_additional_transform()
 
         # Restore original transform matrix for root object
         mmd_root_object.matrix_world = original_matrix_world
@@ -437,3 +435,4 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
         # Apply the final selection
         for bone in edit_bones:
             bone.select = bone.name in final_selection_names
+            
