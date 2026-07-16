@@ -4,15 +4,10 @@ import unittest
 import sys
 import bpy
 
-from cats.tools.common import version_2_79_or_older
-
 
 class TestAddon(unittest.TestCase):
     def set_active_by_name(self, object_name):
-        if version_2_79_or_older():
-            objects = bpy.context.scene.objects
-        else:
-            objects = bpy.context.view_layer.objects
+        objects = bpy.context.view_layer.objects
 
         object_index = objects.find(object_name)
         self.assertGreaterEqual(object_index, 0, msg="Could not find object with name {name}".format(name=object_name))

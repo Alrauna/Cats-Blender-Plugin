@@ -7,7 +7,7 @@ from ..core.lamp import MMDLamp
 
 
 class MMDLampPanel(Panel):
-    bl_idname = "OBJECT_PT_mmd_tools_local_light"
+    bl_idname = "OBJECT_PT_mmd_tools_local_lamp"
     bl_label = "MMD Light Tools"
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"

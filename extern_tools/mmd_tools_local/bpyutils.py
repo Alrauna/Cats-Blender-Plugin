@@ -524,7 +524,8 @@ class FnContext:
 
     @staticmethod
     def __get_addon_preferences(context: bpy.types.Context) -> Optional[bpy.types.AddonPreferences]:
-        addon: bpy.types.Addon = context.preferences.addons.get(__package__, None)
+        addon_package = __package__.split(".extern_tools.", 1)[0]
+        addon: bpy.types.Addon = context.preferences.addons.get(addon_package, None)
         return addon.preferences if addon else None
 
     @staticmethod

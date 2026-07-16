@@ -61,14 +61,7 @@ def _update_types(cls, prop):
 
 def get_addon_package_name():
     """Get the root package name for addon preferences"""
-    current_package = __package__
-    parts = current_package.split(".")
-    try:
-        index = parts.index("mmd_tools_local")
-        return ".".join(parts[: index + 1])
-    except ValueError:
-        pass
-    return current_package
+    return __package__.split(".extern_tools.", 1)[0]
 
 
 def get_preset_directories(operator_bl_idname):

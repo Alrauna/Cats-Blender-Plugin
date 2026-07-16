@@ -8,6 +8,7 @@ import bpy
 from mathutils import Matrix, Vector
 
 from ..bpyutils import FnContext, Props
+from ..compat.action_compat import assign_action_to_datablock
 
 
 class FnCamera:
@@ -233,8 +234,8 @@ class MMDCamera:
                 kp.interpolation = "LINEAR"
 
         FnCamera.add_drivers(mmd_cam)
-        mmd_cam_root.animation_data_create().action = parent_action
-        mmd_cam.animation_data_create().action = distance_action
+        assign_action_to_datablock(mmd_cam_root, parent_action)
+        assign_action_to_datablock(mmd_cam, distance_action)
         scene.frame_set(frame_current)
         return MMDCamera(mmd_cam_root)
 

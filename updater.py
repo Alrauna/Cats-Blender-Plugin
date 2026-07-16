@@ -5,16 +5,21 @@ import ssl
 import bpy
 import time
 import json
-import urllib
+import re
+import fnmatch
+import tomllib
+import urllib.error
+import urllib.request
 import shutil
 import pathlib
 import zipfile
-import addon_utils
 from threading import Thread
+from queue import Empty, Queue
 from collections import OrderedDict
 from bpy.app.handlers import persistent
 from .tools.translations import t
 from .tools.common import wrap_dynamic_enum_items
+from .extern_tools.mmd_tools_local.preferences import MMDToolsAddonPreferences
 from . import CATS_VERSION, dev_branch
 
 no_ver_check = False
@@ -37,17 +42,155 @@ confirm_update_to = ''
 
 show_error = ''
 
-main_dir = os.path.dirname(__file__)
-downloads_dir = os.path.join(main_dir, "downloads")
-resources_dir = os.path.join(main_dir, "resources")
-ignore_ver_file = os.path.join(resources_dir, "ignore_version.txt")
-no_auto_ver_check_file = os.path.join(resources_dir, "no_auto_ver_check.txt")
+# The full package name includes Blender's ``bl_ext.<repo>`` prefix for
+# extensions. AddonPreferences must use that exact identity.
+package_name = __package__ or __name__.rpartition('.')[0]
 
-# Get package name, important for panel in user preferences
-package_name = ''
-for mod in addon_utils.modules():
-    if mod.bl_info['name'] == 'Cats Blender Plugin':
-        package_name = mod.__name__
+
+def _user_storage_dir(path):
+    try:
+        return bpy.utils.extension_path_user(package_name, path=path, create=True)
+    except (AttributeError, ValueError):
+        return bpy.utils.user_resource(
+            'CONFIG', path=os.path.join("cats_blender_plugin", path), create=True
+        )
+
+
+updater_state_dir = _user_storage_dir("updater")
+downloads_dir = _user_storage_dir(os.path.join("updater", "downloads"))
+ignore_ver_file = os.path.join(updater_state_dir, "ignore_version.txt")
+no_auto_ver_check_file = os.path.join(updater_state_dir, "no_auto_ver_check.txt")
+
+# Keep release endpoints in one place so a maintained fork only needs to change
+# this repository slug. Do not fall back to the archived Disroot updater.
+UPDATE_REPOSITORY = "teamneoneko/Cats-Blender-Plugin-Unofficial-"
+UPDATE_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases"
+UPDATE_DEV_BRANCH = "blender-5x-dev"
+NETWORK_TIMEOUT_SECONDS = 30
+_update_result_queue = Queue()
+_update_check_generation = 0
+EXTENSION_PACKAGE_ID = "cats_blender_plugin"
+
+
+def _online_access_allowed():
+    return bool(getattr(bpy.app, 'online_access', True))
+
+
+def _version_tuple(version):
+    return tuple(int(part) for part in re.findall(r'\d+', version or ''))
+
+
+def _extension_repository_id():
+    package_parts = package_name.split('.')
+    if len(package_parts) >= 3 and package_parts[0] == 'bl_ext':
+        return package_parts[1]
+    return None
+
+
+def _release_package_url(release):
+    candidates = []
+    for asset in release.get('assets') or []:
+        if not isinstance(asset, dict):
+            continue
+        name = asset.get('name') or ''
+        url = asset.get('browser_download_url') or ''
+        if name.lower().endswith('.zip') and url.lower().startswith('https://'):
+            candidates.append((name, url))
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda item: (
+            'cats-blender-plugin' not in item[0].lower(),
+            'cats' not in item[0].lower(),
+            item[0].lower(),
+        )
+    )
+    return candidates[0][1]
+
+
+def _matches_build_exclusion(relative_path, patterns):
+    path = pathlib.PurePosixPath(relative_path)
+    path_text = path.as_posix()
+    for pattern in patterns:
+        normalized = str(pattern).replace('\\', '/').lstrip('/')
+        if not normalized:
+            continue
+        if normalized.endswith('/'):
+            directory = normalized.rstrip('/')
+            if '/' in directory:
+                if path_text == directory or path_text.startswith(directory + '/'):
+                    return True
+            elif directory in path.parts:
+                return True
+            continue
+        if fnmatch.fnmatch(path_text, normalized) or fnmatch.fnmatch(path.name, normalized):
+            return True
+    return False
+
+
+def _normalize_source_archive(source_path, destination_path):
+    with zipfile.ZipFile(source_path, 'r') as source:
+        manifest_entries = [
+            info for info in source.infolist()
+            if not info.is_dir() and pathlib.PurePosixPath(info.filename).name == 'blender_manifest.toml'
+        ]
+        if len(manifest_entries) != 1:
+            raise ValueError('The development archive does not contain exactly one Blender manifest')
+
+        manifest_entry = manifest_entries[0]
+        manifest_path = pathlib.PurePosixPath(manifest_entry.filename)
+        prefix = manifest_path.parts[:-1]
+        if not prefix:
+            shutil.copyfile(source_path, destination_path)
+            return
+
+        manifest = tomllib.loads(source.read(manifest_entry).decode('utf-8'))
+        exclusions = manifest.get('build', {}).get('paths_exclude_pattern', [])
+
+        with zipfile.ZipFile(destination_path, 'w', compression=zipfile.ZIP_DEFLATED) as destination:
+            for info in source.infolist():
+                source_name = pathlib.PurePosixPath(info.filename)
+                if info.is_dir() or source_name.parts[:len(prefix)] != prefix:
+                    continue
+                relative_parts = source_name.parts[len(prefix):]
+                if not relative_parts or '..' in relative_parts:
+                    continue
+                relative_name = pathlib.PurePosixPath(*relative_parts).as_posix()
+                if _matches_build_exclusion(relative_name, exclusions):
+                    continue
+                with source.open(info, 'r') as source_file:
+                    destination.writestr(relative_name, source_file.read())
+
+
+def _validate_update_archive(archive_path):
+    try:
+        with zipfile.ZipFile(archive_path, 'r') as archive:
+            for info in archive.infolist():
+                path = pathlib.PurePosixPath(info.filename)
+                if path.is_absolute() or '..' in path.parts:
+                    return 'The update ZIP contains an unsafe path'
+
+            manifest_entries = [
+                info for info in archive.infolist()
+                if not info.is_dir() and info.filename.replace('\\', '/') == 'blender_manifest.toml'
+            ]
+            if len(manifest_entries) != 1:
+                return 'The update ZIP is not a built Blender extension package'
+
+            manifest = tomllib.loads(archive.read(manifest_entries[0]).decode('utf-8'))
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile, tomllib.TOMLDecodeError) as error:
+        return 'The update ZIP could not be validated: ' + str(error)
+
+    if manifest.get('id') != EXTENSION_PACKAGE_ID:
+        return 'The update ZIP belongs to a different Blender extension'
+    if not manifest.get('version'):
+        return 'The update ZIP does not declare a version'
+    minimum_version = _version_tuple(manifest.get('blender_version_min'))
+    if minimum_version and minimum_version > tuple(bpy.app.version):
+        return 'The update ZIP requires a newer Blender version'
+    return ''
 
 # Icons for UI
 ICON_URL = 'URL'
@@ -63,8 +206,13 @@ class CheckForUpdateButton(bpy.types.Operator):
         return not is_checking_for_update
 
     def execute(self, context):
-        global used_updater_panel
+        global used_updater_panel, show_error
         used_updater_panel = True
+        if not _online_access_allowed():
+            show_error = "Online access is disabled in Blender's preferences"
+            self.report({'ERROR'}, show_error)
+            ui_refresh()
+            return {'CANCELLED'}
         check_for_update_background()
         return {'FINISHED'}
 
@@ -206,6 +354,10 @@ class ConfirmUpdatePanel(bpy.types.Operator):
     show_patchnotes = False
 
     def execute(self, context):
+        if not _online_access_allowed():
+            self.report({'ERROR'}, "Online access is disabled in Blender's preferences")
+            return {'CANCELLED'}
+
         print('UPDATE TO ' + confirm_update_to)
         if confirm_update_to == 'dev':
             update_now(dev=True)
@@ -318,6 +470,9 @@ class UpdateNotificationPopup(bpy.types.Operator):
     def execute(self, context):
         action = context.scene.cats_update_action
         if action == 'UPDATE':
+            if not _online_access_allowed():
+                self.report({'ERROR'}, "Online access is disabled in Blender's preferences")
+                return {'CANCELLED'}
             update_now(latest=True)
         elif action == 'IGNORE':
             set_ignored_version()
@@ -356,12 +511,20 @@ class UpdateNotificationPopup(bpy.types.Operator):
 
 
 def check_for_update_background(check_on_startup=False):
-    global is_checking_for_update, checked_on_startup
+    global is_checking_for_update, checked_on_startup, show_error, _update_check_generation
     if check_on_startup and checked_on_startup:
         # print('ALREADY CHECKED ON STARTUP')
         return
     if is_checking_for_update:
         # print('ALREADY CHECKING')
+        return
+
+    if not _online_access_allowed():
+        if check_on_startup:
+            checked_on_startup = True
+        else:
+            show_error = "Online access is disabled in Blender's preferences"
+            ui_refresh()
         return
 
     checked_on_startup = True
@@ -372,16 +535,36 @@ def check_for_update_background(check_on_startup=False):
 
     is_checking_for_update = True
 
-    thread = Thread(target=check_for_update, args=[])
+    if not bpy.app.timers.is_registered(_consume_update_check_result):
+        bpy.app.timers.register(_consume_update_check_result, first_interval=0.1)
+
+    blender_series = tuple(bpy.app.version[:2])
+    _update_check_generation += 1
+    check_generation = _update_check_generation
+    thread = Thread(
+        target=check_for_update,
+        args=[blender_series, check_generation],
+        daemon=True,
+    )
     thread.start()
 
 
-def check_for_update():
+def check_for_update(blender_series, check_generation):
     print('Checking for Cats update...')
 
     # Get all releases from Github
-    if not get_github_releases('teamneoneko'):
-        finish_update_checking(error=t('check_for_update.cantCheck'))
+    if not get_github_releases(
+        UPDATE_REPOSITORY,
+        blender_series=blender_series,
+        check_generation=check_generation,
+    ):
+        if check_generation == _update_check_generation:
+            _update_result_queue.put(
+                (check_generation, t('check_for_update.cantCheck'), False)
+            )
+        return
+
+    if check_generation != _update_check_generation:
         return
 
     # Check if an update is needed
@@ -392,18 +575,35 @@ def check_for_update():
     # Update needed, show the notification popup if it wasn't checked through the UI
     if update_needed:
         print('Update found!')
-        if not used_updater_panel and not is_ignored_version:
-            prepare_to_show_update_notification()
     else:
         print('No update found.')
 
-    # Finish update checking, update the UI
-    finish_update_checking()
+    if check_generation != _update_check_generation:
+        return
+    should_notify = update_needed and not used_updater_panel and not is_ignored_version
+    _update_result_queue.put((check_generation, '', should_notify))
 
 
-def get_github_releases(repo):
+def _consume_update_check_result():
+    while True:
+        try:
+            check_generation, error, should_notify = _update_result_queue.get_nowait()
+        except Empty:
+            return 0.1
+        if check_generation == _update_check_generation:
+            break
+
+    if should_notify:
+        prepare_to_show_update_notification()
+    finish_update_checking(error=error)
+    return None
+
+
+def get_github_releases(repo, blender_series=None, check_generation=None):
     global version_list
-    version_list = OrderedDict()
+    releases = OrderedDict()
+    if check_generation is None or check_generation == _update_check_generation:
+        version_list = releases
 
     if fake_update:
         print('FAKE INSTALL!')
@@ -415,51 +615,70 @@ def get_github_releases(repo):
         if version_tag.startswith('v'):
             version_tag = version_tag[1:]
 
-        version_list[version_tag] = ['', 'Put exiting new stuff here', 'Today']
-        version_list['12.34.56.78'] = ['', 'Nothing new to see', 'A week ago probably']
+        releases[version_tag] = ['', 'Put exiting new stuff here', 'Today']
+        releases['12.34.56.78'] = ['', 'Nothing new to see', 'A week ago probably']
+        version_list = releases
         return True
 
-    try:
-        ssl._create_default_https_context = ssl._create_unverified_context
-        with urllib.request.urlopen('https://git.disroot.org/api/v1/repos/Neoneko/Cats-Blender-Plugin/releases') as url:
-            data = json.loads(url.read().decode())
-    except urllib.error.URLError:
-        print('URL ERROR')
+    if blender_series is None and not _online_access_allowed():
         return False
-    if not data:
-        return False
-    
-    # Determine tag prefix based on Blender version
-    tag_prefix = ""
-    if bpy.app.version >= (5, 0) and bpy.app.version < (5, 1):
-        tag_prefix = "5.0."
 
-    for version in data:
-        full_tag = version.get('tag_name')
-        
-        # If we have a tag prefix, skip versions that don't match
-        if tag_prefix and not full_tag.startswith(tag_prefix):
-            continue   
-            
-        version_tag = full_tag
-        
-        # Remove prefix if present
-        if tag_prefix and version_tag.startswith(tag_prefix):
-            version_tag = version_tag[len(tag_prefix):]
-        
-        # Normalize version_tag 
-        version_tag = version_tag.replace('-', '.')
-        if version_tag.startswith('v.'):
-            version_tag = version_tag[2:]
-        if version_tag.startswith('v'):
-            version_tag = version_tag[1:]
-        
-        # Store full tag  
-        version_list[full_tag] = [
-            version['zipball_url'],
-            version['body'],
-            version['published_at'].split('T')[0]
-        ]
+    repository = repo if '/' in repo else f"teamneoneko/{repo}"
+    api_url = (
+        UPDATE_API_URL
+        if repository == UPDATE_REPOSITORY
+        else f"https://api.github.com/repos/{repository}/releases"
+    )
+    request = urllib.request.Request(
+        api_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "Cats-Blender-Plugin",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as url:
+            data = json.loads(url.read().decode('utf-8'))
+    except (urllib.error.URLError, ssl.SSLError, TimeoutError, json.JSONDecodeError) as error:
+        print('UPDATE RELEASE CHECK FAILED:', error)
+        return False
+    if not isinstance(data, list) or not data:
+        return False
+
+    if blender_series is None:
+        blender_series = tuple(bpy.app.version[:2])
+    compatible_releases = []
+    for release in data:
+        if not isinstance(release, dict):
+            continue
+        if release.get('draft'):
+            continue
+
+        full_tag = release.get('tag_name') or ''
+        tag_version = _version_tuple(full_tag)
+        if len(tag_version) < 2 or tag_version[:2] != blender_series:
+            continue
+
+        update_url = _release_package_url(release)
+        if not update_url:
+            continue
+
+        published_at = release.get('published_at') or ''
+        compatible_releases.append((tag_version, full_tag, [
+            update_url,
+            release.get('body') or '',
+            published_at.split('T')[0],
+        ]))
+
+    for _tag_version, full_tag, release_data in sorted(
+        compatible_releases, key=lambda item: item[0], reverse=True
+    ):
+        releases[full_tag] = release_data
+
+    if check_generation is not None and check_generation != _update_check_generation:
+        return False
+    version_list = releases
 
     return True
 
@@ -469,18 +688,14 @@ def check_for_update_available():
         return False
 
     global latest_version, latest_version_str
-    latest_version = []
-    for version in version_list.keys():
-        latest_version_str = version
-        for i in version.split('.'):
-            if i.isdigit():
-                latest_version.append(int(i))
-        if latest_version:
-            break
+    latest_version_str = next(iter(version_list))
+    latest_version = list(_version_tuple(latest_version_str))
 
     # print(latest_version, '>', current_version)
     if latest_version > current_version:
         return True
+
+    return False
 
 
 def finish_update_checking(error=''):
@@ -510,23 +725,20 @@ def ui_refresh():
 
 
 def get_update_post():
-    if hasattr(bpy.app.handlers, 'scene_update_post'):
-        return bpy.app.handlers.scene_update_post
-    else:
-        return bpy.app.handlers.depsgraph_update_post
+    return bpy.app.handlers.depsgraph_update_post
 
 
 def prepare_to_show_update_notification():
     # This is necessary to show a popup directly after startup
     # You will get a nasty error otherwise
-    # This will add the function to the scene_update_post and it will be executed every frame. that's why it needs to be removed again asap
+    # Run once from the dependency-graph post handler, then remove it immediately.
     # print('PREPARE TO SHOW UI')
     if show_update_notification not in get_update_post():
         get_update_post().append(show_update_notification)
 
 
 @persistent
-def show_update_notification(scene):  # One argument in necessary for some reason
+def show_update_notification(scene, depsgraph=None):
     # print('SHOWING UI NOW!!!!')
 
     # # Immediately remove this from handlers again
@@ -542,120 +754,119 @@ def update_now(version=None, latest=False, dev=False):
     if fake_update:
         finish_update()
         return
+
+    if not _online_access_allowed():
+        finish_update(error="Online access is disabled in Blender's preferences")
+        return
+
     if dev:
         print('UPDATE TO DEVELOPMENT')
-        # Dynamically construct dev branch URL based on major version
-        major_version = CATS_VERSION.split('.')[0]
-        update_link = f'https://git.disroot.org/Neoneko/Cats-Blender-Plugin/archive/blender-{major_version}x-dev.zip'
+        update_link = (
+            f"https://github.com/{UPDATE_REPOSITORY}/archive/refs/heads/"
+            f"{UPDATE_DEV_BRANCH}.zip"
+        )
     elif latest or not version:
+        if not version_list or latest_version_str not in version_list:
+            finish_update(error="No compatible Blender 5.2 update is available")
+            return
         print('UPDATE TO ' + latest_version_str)
         update_link = version_list.get(latest_version_str)[0]
         bpy.context.scene.cats_updater_version_list = latest_version_str
     else:
+        if not version_list or version not in version_list:
+            finish_update(error="The selected update is no longer available")
+            return
         print('UPDATE TO ' + version)
         update_link = version_list[version][0]
 
-    download_file(update_link)
+    download_file(update_link, normalize_source_archive=dev)
 
 
-def download_file(update_url):
-    # Load all the directories and files
+def download_file(update_url, normalize_source_archive=False):
     update_zip_file = os.path.join(downloads_dir, "cats-update.zip")
+    downloaded_file = update_zip_file + ".download.tmp"
+    prepared_file = update_zip_file + ".prepared.tmp"
 
-    # Remove existing download folder
-    if os.path.isdir(downloads_dir):
-        print("DOWNLOAD FOLDER EXISTED")
-        shutil.rmtree(downloads_dir)
+    if not _online_access_allowed():
+        finish_update(error="Online access is disabled in Blender's preferences")
+        return
+    if not update_url or not update_url.lower().startswith('https://'):
+        finish_update(error="Cats refused an update URL that was not HTTPS")
+        return
 
-    # Create download folder
-    pathlib.Path(downloads_dir).mkdir(exist_ok=True)
+    pathlib.Path(downloads_dir).mkdir(parents=True, exist_ok=True)
 
-    # Download zip
     print('DOWNLOAD FILE')
     try:
-        ssl._create_default_https_context = ssl._create_unverified_context
-        urllib.request.urlretrieve(update_url, update_zip_file)
-    except urllib.error.URLError:
-        print("FILE COULD NOT BE DOWNLOADED")
-        shutil.rmtree(downloads_dir)
+        request = urllib.request.Request(
+            update_url,
+            headers={"User-Agent": "Cats-Blender-Plugin"},
+        )
+        with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+            with open(downloaded_file, 'wb') as outfile:
+                shutil.copyfileobj(response, outfile)
+
+        if normalize_source_archive:
+            _normalize_source_archive(downloaded_file, prepared_file)
+            os.replace(prepared_file, update_zip_file)
+            os.remove(downloaded_file)
+        else:
+            os.replace(downloaded_file, update_zip_file)
+    except (OSError, ValueError, urllib.error.URLError, ssl.SSLError, TimeoutError, zipfile.BadZipFile, tomllib.TOMLDecodeError) as error:
+        print("FILE COULD NOT BE DOWNLOADED:", error)
+        for temporary_file in (downloaded_file, prepared_file):
+            try:
+                os.remove(temporary_file)
+            except FileNotFoundError:
+                pass
         finish_update(error=t('download_file.cantConnect'))
         return
     print('DOWNLOAD FINISHED')
 
-    # If zip is not downloaded, abort
-    if not os.path.isfile(update_zip_file):
-        print("ZIP NOT FOUND!")
-        shutil.rmtree(downloads_dir)
+    if not os.path.isfile(update_zip_file) or not zipfile.is_zipfile(update_zip_file):
+        print("VALID UPDATE ZIP NOT FOUND!")
         finish_update(error=t('download_file.cantFindZip'))
         return
 
-    # Extract the downloaded zip
-    print('EXTRACTING ZIP')
-    with zipfile.ZipFile(update_zip_file, "r") as zip_ref:
-        zip_ref.extractall(downloads_dir)
-    print('EXTRACTED')
-
-    # Delete the extracted zip file
-    print('REMOVING ZIP FILE')
-    os.remove(update_zip_file)
-
-    # Detect the extracted folders and files
-    print('SEARCHING FOR INIT 1')
-
-    def searchInit(path):
-        print('SEARCHING IN ' + path)
-        files = os.listdir(path)
-        if "__init__.py" in files:
-            print('FOUND')
-            return path
-        folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
-        if len(folders) != 1:
-            print(len(folders), 'FOLDERS DETECTED')
-            return None
-        print('GOING DEEPER')
-        return searchInit(os.path.join(path, folders[0]))
-
-    print('SEARCHING FOR INIT 2')
-    extracted_zip_dir = searchInit(downloads_dir)
-    if not extracted_zip_dir:
-        print("INIT NOT FOUND!")
-        shutil.rmtree(downloads_dir)
-        # finish_reloading()
-        finish_update(error=t('download_file.cantFindCATS'))
+    validation_error = _validate_update_archive(update_zip_file)
+    if validation_error:
+        print("INVALID UPDATE PACKAGE:", validation_error)
+        finish_update(error=validation_error + "; the ZIP was kept at " + update_zip_file)
         return
 
-    # Remove old addon files
-    clean_addon_dir()
+    # Let Blender replace the extension through its supported installer. The old
+    # updater extracted archives over its own live package, which is unsafe for
+    # extension repositories and could delete unrelated files on malformed ZIPs.
+    repository_id = _extension_repository_id()
+    if not repository_id:
+        finish_update(
+            error="Cats is not running from a Blender extension repository; the update ZIP was kept at "
+            + update_zip_file
+        )
+        return
 
-    # Move the extracted files to their correct places
-    def move_files(from_dir, to_dir):
-        print('MOVE FILES TO DIR:', to_dir)
-        files = os.listdir(from_dir)
-        for file in files:
-            file_dir = os.path.join(from_dir, file)
-            target_dir = os.path.join(to_dir, file)
-            print('MOVE', file_dir)
+    try:
+        result = bpy.ops.extensions.package_install_files(
+            'EXEC_DEFAULT',
+            filepath=update_zip_file,
+            repo=repository_id,
+            enable_on_install=True,
+            overwrite=True,
+        )
+    except (AttributeError, RuntimeError) as error:
+        print("BLENDER COULD NOT INSTALL THE UPDATE:", error)
+        finish_update(
+            error="Blender could not install the update automatically; the ZIP was kept at "
+            + update_zip_file
+        )
+        return
 
-            # If file exists
-            if os.path.isfile(file_dir) and os.path.isfile(target_dir):
-                os.remove(target_dir)
-                shutil.move(file_dir, to_dir)
-                print('REMOVED AND MOVED', file)
+    if 'FINISHED' not in result:
+        finish_update(
+            error="Blender did not install the update; the ZIP was kept at " + update_zip_file
+        )
+        return
 
-            elif os.path.isdir(file_dir) and os.path.isdir(target_dir):
-                move_files(file_dir, target_dir)
-
-            else:
-                shutil.move(file_dir, to_dir)
-                print('MOVED', file)
-
-    move_files(extracted_zip_dir, main_dir)
-
-    # Delete download folder
-    print('DELETE DOWNLOADS DIR')
-    shutil.rmtree(downloads_dir)
-
-    # Finish the update
     finish_update()
 
 
@@ -672,58 +883,13 @@ def finish_update(error=''):
 
 
 def clean_addon_dir():
-    print("CLEAN ADDON FOLDER")
-
-    # first remove root files and folders (except update folder, important folders and resource folder)
-    files = [f for f in os.listdir(main_dir) if os.path.isfile(os.path.join(main_dir, f))]
-    folders = [f for f in os.listdir(main_dir) if os.path.isdir(os.path.join(main_dir, f))]
-
-    for f in files:
-        file = os.path.join(main_dir, f)
-        try:
-            os.remove(file)
-            print("Clean removing file {}".format(file))
-        except OSError:
-            print("Failed to pre-remove file " + file)
-
-    for f in folders:
-        folder = os.path.join(main_dir, f)
-        if f.startswith('.') or f == 'resources' or f == 'downloads':
-            continue
-
-        try:
-            shutil.rmtree(folder)
-            print("Clean removing folder and contents {}".format(folder))
-        except OSError:
-            print("Failed to pre-remove folder " + folder)
-
-    # then remove resource files and folders (except settings and google dict)
-    resources_folder = os.path.join(main_dir, 'resources')
-    files = [f for f in os.listdir(resources_folder) if os.path.isfile(os.path.join(resources_folder, f))]
-    folders = [f for f in os.listdir(resources_folder) if os.path.isdir(os.path.join(resources_folder, f))]
-
-    for f in files:
-        if f == 'settings.json' or f == 'dictionary_google.json':
-            continue
-        file = os.path.join(resources_folder, f)
-        try:
-            os.remove(file)
-            print("Clean removing file {}".format(file))
-        except OSError:
-            print("Failed to pre-remove " + file)
-
-    for f in folders:
-        folder = os.path.join(resources_folder, f)
-        try:
-            shutil.rmtree(folder)
-            print("Clean removing folder and contents {}".format(folder))
-        except OSError:
-            print("Failed to pre-remove folder " + folder)
+    # Retained as a compatibility shim for third-party callers. Package cleanup
+    # is deliberately delegated to Blender's extension installer.
+    print("Package cleanup is managed by Blender's extension installer")
 
 
 def set_ignored_version():
-    # Create resources folder
-    pathlib.Path(resources_dir).mkdir(exist_ok=True)
+    pathlib.Path(updater_state_dir).mkdir(parents=True, exist_ok=True)
 
     # Create ignore file
     with open(ignore_ver_file, 'w', encoding="utf8") as outfile:
@@ -921,12 +1087,17 @@ def draw_updater_panel(context, layout, user_preferences=False):
 
 
 # demo bare-bones preferences
-class DemoPreferences(bpy.types.AddonPreferences):
+class DemoPreferences(MMDToolsAddonPreferences):
     bl_idname = package_name
+    __annotations__ = dict(MMDToolsAddonPreferences.__annotations__)
 
     def draw(self, context):
         layout = self.layout
+        layout.label(text="CATS Updates")
         draw_updater_panel(context, layout, user_preferences=True)
+        layout.separator()
+        layout.label(text="Bundled MMD Tools")
+        MMDToolsAddonPreferences.draw(self, context)
 
 
 to_register = [
@@ -946,11 +1117,12 @@ to_register = [
 
 def register(dev_branch, version_str):
     # print('REGISTER CATS UPDATER')
-    global current_version, fake_update, current_version_str
+    global current_version, fake_update, current_version_str, checked_on_startup
 
     # If not dev branch, always disable fake update!
     if not dev_branch:
         fake_update = False
+    checked_on_startup = False
     current_version_str = version_str
 
     # Get current version
@@ -989,6 +1161,27 @@ def register(dev_branch, version_str):
 
 
 def unregister():
+    global is_checking_for_update, checked_on_startup, _update_check_generation
+
+    # Invalidate an in-flight network result before removing its main-thread
+    # consumer. A worker that finishes later will see the generation mismatch.
+    _update_check_generation += 1
+    is_checking_for_update = False
+    checked_on_startup = False
+
+    if bpy.app.timers.is_registered(_consume_update_check_result):
+        bpy.app.timers.unregister(_consume_update_check_result)
+
+    update_post = get_update_post()
+    if show_update_notification in update_post:
+        update_post.remove(show_update_notification)
+
+    while True:
+        try:
+            _update_result_queue.get_nowait()
+        except Empty:
+            break
+
     # Unregister all Updater classes
     for cls in reversed(to_register):
         try:
@@ -998,3 +1191,5 @@ def unregister():
 
     if hasattr(bpy.types.Scene, 'cats_updater_version_list'):
         del bpy.types.Scene.cats_updater_version_list
+    if hasattr(bpy.types.Scene, 'cats_update_action'):
+        del bpy.types.Scene.cats_update_action

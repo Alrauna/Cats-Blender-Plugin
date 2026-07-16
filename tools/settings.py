@@ -7,8 +7,6 @@ import copy
 import time
 import pathlib
 import collections
-import threading
-from threading import Thread, Event
 from datetime import datetime, timezone
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -20,13 +18,34 @@ from . import translate as Translate
 from .translations import t
 
 main_dir = pathlib.Path(os.path.dirname(__file__)).parent.resolve()
-resources_dir = os.path.join(str(main_dir), "resources")
+bundled_resources_dir = os.path.join(str(main_dir), "resources")
+bundled_settings_file = os.path.join(bundled_resources_dir, "settings.json")
+
+# Blender extensions can be installed into read-only repositories and are replaced
+# wholesale during upgrades. Keep all mutable settings in Blender's per-extension
+# user directory instead of beside the installed Python files.
+addon_package = __package__.rpartition('.')[0]
+
+
+def _user_storage_dir(path):
+    try:
+        return bpy.utils.extension_path_user(addon_package, path=path, create=True)
+    except (AttributeError, ValueError):
+        # Keep legacy add-on installs working without writing into their package.
+        return bpy.utils.user_resource(
+            'CONFIG', path=os.path.join("cats_blender_plugin", path), create=True
+        )
+
+
+resources_dir = _user_storage_dir("resources")
 settings_file = os.path.join(resources_dir, "settings.json")
 
 settings_data = None
 settings_data_unchanged = None
-settings_stop_event = Event()
-settings_threads = []
+settings_timer_started_at = None
+settings_timer_stopped = True
+SETTINGS_TIMER_INTERVAL = 0.3
+SETTINGS_TIMER_TIMEOUT = 5.0
 
 # Settings name = [Default Value, Require Blender Restart]
 settings_default = OrderedDict()
@@ -79,6 +98,10 @@ class DebugTranslations(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
+        if not bpy.app.online_access:
+            self.report({'ERROR'}, "Online access is disabled in Blender's preferences")
+            return {'CANCELLED'}
+
         bpy.context.scene.debug_translations = True
         translator = google_translator()
         try:
@@ -93,8 +116,14 @@ class DebugTranslations(bpy.types.Operator):
 def load_settings():
     global settings_data, settings_data_unchanged
 
+    source_file = settings_file
+    migrate_legacy_settings = False
+    if not os.path.isfile(source_file) and os.path.isfile(bundled_settings_file):
+        source_file = bundled_settings_file
+        migrate_legacy_settings = True
+
     try:
-        with open(settings_file, encoding="utf8") as file:
+        with open(source_file, encoding="utf8") as file:
             settings_data = json.load(file, object_pairs_hook=collections.OrderedDict)
     except FileNotFoundError:
         print("SETTINGS FILE NOT FOUND!")
@@ -143,9 +172,15 @@ def load_settings():
 
     settings_data_unchanged = copy.deepcopy(settings_data)
 
+    if migrate_legacy_settings:
+        save_settings()
+
 def save_settings():
-    with open(settings_file, 'w', encoding="utf8") as outfile:
+    os.makedirs(resources_dir, exist_ok=True)
+    temporary_file = settings_file + ".tmp"
+    with open(temporary_file, 'w', encoding="utf8") as outfile:
         json.dump(settings_data, outfile, ensure_ascii=False, indent=4)
+    os.replace(temporary_file, settings_file)
 
 def reset_settings(full_reset=False, to_reset_settings=None):
     if not to_reset_settings:
@@ -173,20 +208,37 @@ def reset_settings(full_reset=False, to_reset_settings=None):
     print('SETTINGS RESET')
 
 def start_apply_settings_timer():
-    global settings_threads
-    thread = Thread(target=apply_settings_with_timeout, args=[])
-    settings_threads.append(thread)
-    thread.start()
+    global settings_timer_started_at, settings_timer_stopped
+
+    if bpy.app.timers.is_registered(apply_settings_with_timeout):
+        bpy.app.timers.unregister(apply_settings_with_timeout)
+
+    # An add-on can be disabled and enabled again in the same Blender session.
+    settings_timer_stopped = False
+    settings_timer_started_at = time.monotonic()
+    bpy.app.timers.register(apply_settings_with_timeout, first_interval=0.0)
 
 def apply_settings_with_timeout():
-    timeout = 5  # 5 seconds timeout
-    timer = threading.Timer(timeout, release_lock)
-    timer.start()
-    try:
-        with settings_lock_context():
-            apply_settings()
-    finally:
-        timer.cancel()
+    global settings_timer_started_at
+
+    if settings_timer_stopped:
+        settings_timer_started_at = None
+        return None
+
+    if (
+        settings_timer_started_at is not None
+        and time.monotonic() - settings_timer_started_at >= SETTINGS_TIMER_TIMEOUT
+    ):
+        release_lock()
+        settings_timer_started_at = None
+        return None
+
+    with settings_lock_context():
+        if apply_settings():
+            settings_timer_started_at = None
+            return None
+
+    return SETTINGS_TIMER_INTERVAL
 
 def release_lock():
     global lock_settings
@@ -194,36 +246,35 @@ def release_lock():
     lock_settings = False
 
 def apply_settings():
-    applied = False
-    while not applied and not settings_stop_event.is_set():
-        if hasattr(bpy.context, 'scene'):
-            try:
-                settings_to_reset = []
-                for setting in settings_default.keys():
-                    try:
-                        setattr(bpy.context.scene, setting, settings_data.get(setting))
-                    except TypeError:
-                        settings_to_reset.append(setting)
-                if settings_to_reset:
-                    reset_settings(to_reset_settings=settings_to_reset)
-                    print("RESET SETTING ON TIMER:", setting)
-            except AttributeError:
-                time.sleep(0.3)
-                continue
+    if not hasattr(bpy.context, 'scene') or bpy.context.scene is None:
+        return False
 
-            applied = True
-            print('Settings applied successfully')
-        else:
-            time.sleep(0.3)
+    try:
+        settings_to_reset = []
+        for setting in settings_default.keys():
+            try:
+                setattr(bpy.context.scene, setting, settings_data.get(setting))
+            except TypeError:
+                settings_to_reset.append(setting)
+        if settings_to_reset:
+            reset_settings(to_reset_settings=settings_to_reset)
+            print("RESET SETTINGS ON TIMER:", settings_to_reset)
+    except (AttributeError, ReferenceError):
+        return False
+
+    print('Settings applied successfully')
+    return True
 
 def stop_apply_settings_threads():
-    global settings_threads, settings_stop_event
+    global settings_timer_started_at, settings_timer_stopped, lock_settings
 
-    print("Stopping settings threads...")
-    settings_stop_event.set()
-    for t in settings_threads:
-        t.join()
-    print("Settings threads stopped.")
+    print("Stopping settings timer...")
+    settings_timer_stopped = True
+    settings_timer_started_at = None
+    if bpy.app.timers.is_registered(apply_settings_with_timeout):
+        bpy.app.timers.unregister(apply_settings_with_timeout)
+    lock_settings = False
+    print("Settings timer stopped.")
 
 def settings_changed():
     for setting, value in settings_default.items():
@@ -266,4 +317,3 @@ def get_embed_textures():
 
 def get_ui_lang():
     return settings_data.get('ui_lang')
-

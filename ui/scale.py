@@ -3,9 +3,9 @@
 import bpy
 import addon_utils
 from importlib import import_module
-from importlib.util import find_spec
 
 from .main import ToolPanel, draw_error_box
+from .. import imscale as bundled_imscale
 from ..tools import scale as Scaler
 
 from ..tools.translations import t
@@ -32,9 +32,8 @@ def check_for_imscale(force_refresh=False):
         draw_imscale_ui = None
 
         # Check if using immersive scaler shipped with cats
-        if find_spec("imscale") and find_spec("imscale.immersive_scaler"):
-            import imscale.immersive_scaler as imscale
-            draw_imscale_ui = imscale.ui.draw_ui
+        if bundled_imscale is not None:
+            draw_imscale_ui = bundled_imscale.ui.draw_ui
             _imscale_check_cache = True
             _imscale_cache_timestamp = current_time
             return

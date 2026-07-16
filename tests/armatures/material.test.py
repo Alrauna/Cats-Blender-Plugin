@@ -7,8 +7,8 @@ import bpy
 
 class TestAddon(unittest.TestCase):
     def test_material_combine(self):
-        bpy.ops.cats_armature.fix()
-        bpy.ops.cats_material.combine_mats()
+        self.assertEqual({'FINISHED'}, bpy.ops.cats_armature.fix())
+        self.assertEqual({'FINISHED'}, bpy.ops.cats_material.combine_mats())
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestAddon)

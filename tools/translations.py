@@ -3,13 +3,9 @@
 # Thanks to https://www.thegrove3d.com/learn/how-to-translate-a-blender-addon/ for the idea
 
 import os
-import csv
-import ssl
 import bpy
 import json
-import urllib
 import pathlib
-import addon_utils
 import requests
 from bpy.app.translations import locale
 
@@ -17,16 +13,63 @@ from .register import register_wrap
 from . import settings
 
 main_dir = pathlib.Path(os.path.dirname(__file__)).parent.resolve()
-resources_dir = os.path.join(str(main_dir), "resources")
+bundled_resources_dir = os.path.join(str(main_dir), "resources")
+bundled_translations_dir = os.path.join(bundled_resources_dir, "translations")
+addon_package = __package__.rpartition('.')[0]
+
+
+def _user_storage_dir(path):
+    try:
+        return bpy.utils.extension_path_user(addon_package, path=path, create=True)
+    except (AttributeError, ValueError):
+        return bpy.utils.user_resource(
+            'CONFIG', path=os.path.join("cats_blender_plugin", path), create=True
+        )
+
+
+resources_dir = _user_storage_dir("resources")
 settings_file = os.path.join(resources_dir, "settings.json")
-translations_dir = os.path.join(resources_dir, "translations")
+translations_dir = _user_storage_dir(os.path.join("resources", "translations"))
 
 dictionary: dict[str, str] = dict()
 languages = []
 verbose = True
 last_loaded_language = None
-dictionary_download_link = "https://github.com/teamneoneko/Cats-Blender-Plugin-Unofficial-translations/blob/4.3-translations/dictionary.json"
+dictionary_download_link = "https://raw.githubusercontent.com/teamneoneko/Cats-Blender-Plugin-Unofficial-translations/5x-translations/dictionary.json"
 _addon_startup_time = None
+
+
+def _translation_directories():
+    # User downloads override the immutable files bundled with the extension.
+    return translations_dir, bundled_translations_dir
+
+
+def _load_translation_dictionary(language):
+    for directory in _translation_directories():
+        candidate = os.path.join(directory, language + ".json")
+        if not os.path.isfile(candidate):
+            continue
+        try:
+            with open(candidate, 'r', encoding='utf-8') as file:
+                messages = json.load(file).get("messages")
+            if isinstance(messages, dict):
+                return candidate, messages
+        except (OSError, json.JSONDecodeError, AttributeError) as error:
+            print(f"Could not load translation file {candidate}: {error}")
+    return None, None
+
+
+def _available_languages():
+    available = []
+    for directory in _translation_directories():
+        if not os.path.isdir(directory):
+            continue
+        for filename in sorted(os.listdir(directory)):
+            if filename.endswith(".json"):
+                language = os.path.splitext(filename)[0]
+                if language not in available:
+                    available.append(language)
+    return available
 
 def load_translations(override_language=None):
     global dictionary, languages, last_loaded_language, _addon_startup_time
@@ -48,9 +91,8 @@ def load_translations(override_language=None):
         language = get_language_from_settings()
         print(f"Selected language: {language}")
 
-    # Get all current languages
-    for i in os.listdir(translations_dir):
-        languages.append(i.split(".")[0])
+    # Get all current languages from user overrides and bundled defaults.
+    languages.extend(_available_languages())
     print(f"Available languages: {languages}")
 
     # Determine the language to load
@@ -62,21 +104,19 @@ def load_translations(override_language=None):
         language_to_load = "en_US"
 
     # Load the translation file
-    translation_file = os.path.join(translations_dir, language_to_load + ".json")
-    if os.path.exists(translation_file):
+    translation_file, loaded_dictionary = _load_translation_dictionary(language_to_load)
+    if translation_file:
         print(f"Loading translation file: {translation_file}")
-        with open(translation_file, 'r') as file:
-            dictionary = json.load(fp=file)["messages"]
+        dictionary = loaded_dictionary
         last_loaded_language = language_to_load
         print(f"Loaded {len(dictionary)} translations from {language_to_load}")
     else:
         print(f"Translation file not found for language: {language_to_load}")
         # Load the default "en_US" translation file as last resort
-        default_file = os.path.join(translations_dir, "en_US.json")
-        if os.path.exists(default_file):
+        default_file, fallback_dictionary = _load_translation_dictionary("en_US")
+        if default_file:
             print(f"Loading fallback translation file: {default_file}")
-            with open(default_file, 'r') as file:
-                dictionary = json.load(fp=file)["messages"]
+            dictionary = fallback_dictionary
             last_loaded_language = "en_US"
             print(f"Loaded {len(dictionary)} translations from en_US (fallback)")
         else:
@@ -164,8 +204,14 @@ def update_ui(self, context):
 
 def get_language_from_settings():
     # Load settings file
+    settings_source = settings_file
+    bundled_settings_file = getattr(
+        settings, 'bundled_settings_file', os.path.join(bundled_resources_dir, "settings.json")
+    )
+    if not os.path.isfile(settings_source) and os.path.isfile(bundled_settings_file):
+        settings_source = bundled_settings_file
     try:
-        with open(settings_file, encoding="utf8") as file:
+        with open(settings_source, encoding="utf8") as file:
             settings_data = json.load(file)
     except FileNotFoundError:
         print("SETTINGS FILE NOT FOUND!")
@@ -201,16 +247,14 @@ def convert_locale_to_language_code(blender_locale):
     locale_str = str(blender_locale)
 
     # Check if exact match exists in available languages
-    for lang_file in os.listdir(translations_dir):
-        lang_code = lang_file.split(".")[0]
+    for lang_code in _available_languages():
         if locale_str == lang_code:
             print(f"Found exact locale match: {lang_code}")
             return lang_code
 
     # Try to match by language code (first part before underscore)
     language_only = locale_str.split("_")[0].lower() if "_" in locale_str else locale_str.lower()
-    for lang_file in os.listdir(translations_dir):
-        lang_code = lang_file.split(".")[0]
+    for lang_code in _available_languages():
         if lang_code.lower().startswith(language_only):
             print(f"Found language match: {lang_code}")
             return lang_code
@@ -227,6 +271,10 @@ class DownloadTranslations(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
+        if not bpy.app.online_access:
+            self.report({'ERROR'}, "Online access is disabled in Blender's preferences")
+            return {'CANCELLED'}
+
         # GitHub repository and folder information
         repo_owner = "teamneoneko"
         repo_name = "Cats-Blender-Plugin-Unofficial-translations"
@@ -238,30 +286,49 @@ class DownloadTranslations(bpy.types.Operator):
 
         try:
             # Send a GET request to the API URL
-            response = requests.get(api_url)
+            response = requests.get(
+                api_url,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "Cats-Blender-Plugin"},
+                timeout=30,
+            )
             response.raise_for_status()  # Raise an exception if the request was unsuccessful
 
             # Parse the JSON response
             files = response.json()
+            if not isinstance(files, list):
+                raise ValueError("GitHub returned an unexpected translation file listing")
 
             # Download each translation file
-            for file in files:
-                if file["type"] == "file" and file["name"].endswith(".json"):
-                    file_url = file["download_url"]
-                    file_name = file["name"]
+            for file_info in files:
+                if not isinstance(file_info, dict):
+                    continue
+                file_name_remote = file_info.get("name", "")
+                if file_info.get("type") == "file" and file_name_remote.endswith(".json"):
+                    file_url = file_info.get("download_url")
+                    if not file_url:
+                        continue
+                    file_name = os.path.basename(file_name_remote)
                     file_path = os.path.join(translations_dir, file_name)
 
                     # Download the translation file
-                    file_response = requests.get(file_url)
+                    file_response = requests.get(file_url, timeout=30)
                     file_response.raise_for_status()
+                    translation_data = file_response.content
+                    translation_json = json.loads(translation_data.decode('utf-8'))
+                    if not isinstance(translation_json, dict) or not isinstance(
+                        translation_json.get('messages'), dict
+                    ):
+                        raise ValueError(f"Downloaded translation is invalid: {file_name}")
 
                     # Save the translation file
-                    with open(file_path, 'wb') as file:
-                        file.write(file_response.content)
+                    temporary_file = file_path + ".tmp"
+                    with open(temporary_file, 'wb') as file:
+                        file.write(translation_data)
+                    os.replace(temporary_file, file_path)
 
                     print(f"Downloaded: {file_name}")
 
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, OSError, ValueError, json.JSONDecodeError) as e:
             print("TRANSLATIONS FILES COULD NOT BE DOWNLOADED")
             self.report({'ERROR'}, "TRANSLATIONS FILES COULD NOT BE DOWNLOADED: " + str(e))
             return {'CANCELLED'}
@@ -274,11 +341,16 @@ class DownloadTranslations(bpy.types.Operator):
         # Download dictionary.json from GitHub
         print('DOWNLOAD DICTIONARY FILE')
         try:
-            response = requests.get(dictionary_download_link)
+            response = requests.get(dictionary_download_link, timeout=30)
             response.raise_for_status()  # Raise an exception if the request was unsuccessful
-            with open(dictionary_file, 'wb') as file:
-                file.write(response.content)
-        except requests.exceptions.RequestException as e:
+            dictionary_data = response.content
+            if not isinstance(json.loads(dictionary_data.decode('utf-8')), dict):
+                raise ValueError("Downloaded translation dictionary is invalid")
+            temporary_file = dictionary_file + ".tmp"
+            with open(temporary_file, 'wb') as file:
+                file.write(dictionary_data)
+            os.replace(temporary_file, dictionary_file)
+        except (requests.exceptions.RequestException, OSError, ValueError, json.JSONDecodeError) as e:
             print("DICTIONARY FILE COULD NOT BE DOWNLOADED")
             self.report({'ERROR'}, "DICTIONARY FILE COULD NOT BE DOWNLOADED: " + str(e))
             return {'CANCELLED'}

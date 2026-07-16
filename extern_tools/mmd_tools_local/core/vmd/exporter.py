@@ -1,6 +1,7 @@
 # Copyright 2016 MMD Tools authors
 # This file is part of MMD Tools.
 
+import ast
 import logging
 import math
 import re
@@ -327,7 +328,18 @@ class VMDExporter:
                     return key_blocks[int(key)]
                 except IndexError:
                     return None
-            return key_blocks.get(eval(key), None)
+            try:
+                key_value = ast.literal_eval(key)
+            except (SyntaxError, ValueError):
+                return None
+            if isinstance(key_value, str):
+                return key_blocks.get(key_value, None)
+            if type(key_value) is int:
+                try:
+                    return key_blocks[key_value]
+                except IndexError:
+                    return None
+            return None
 
         rePath = re.compile(r"^key_blocks\[(.+)\]\.value$")
         for fcurve in animation_data.action.fcurves:

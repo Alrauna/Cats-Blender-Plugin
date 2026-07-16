@@ -54,7 +54,7 @@ class MergeArmature(bpy.types.Operator):
             return {'CANCELLED'}
 
         # Check if armatures are single user
-        if base_armature.data.users > 1 or merge_armature.data.users > 1:
+        if Common.has_shared_object_data(base_armature) or Common.has_shared_object_data(merge_armature):
             saved_data.load()
             wm.progress_end()
             Common.show_error(4, [t('MergeArmature.error.not_single_user'),
@@ -147,7 +147,7 @@ class AttachMesh(bpy.types.Operator):
         wm.progress_update(20)
 
         # Check if armature and mesh are single user
-        if armature.data.users > 1 or mesh.data.users > 1:
+        if Common.has_shared_object_data(armature) or Common.has_shared_object_data(mesh):
             saved_data.load()
             wm.progress_end()
             Common.show_error(4, [t('AttachMesh.error.not_single_user'),

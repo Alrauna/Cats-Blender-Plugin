@@ -7,9 +7,9 @@ import bpy
 
 class TestAddon(unittest.TestCase):
     def test_boneparenting(self):
-        bpy.ops.cats_armature.fix()
-        bpy.ops.cats_root.refresh_root_list()
-        bpy.ops.cats_root.create_root()
+        self.assertEqual({'FINISHED'}, bpy.ops.cats_armature.fix())
+        self.assertEqual({'FINISHED'}, bpy.ops.cats_root.refresh_root_list())
+        self.assertEqual({'FINISHED'}, bpy.ops.cats_root.create_root())
 
 
 

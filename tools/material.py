@@ -4,7 +4,7 @@ import bpy
 from . import common as Common
 from .register import register_wrap
 from .translations import t
-from mmd_tools_local.operators import morph as Morph
+from ..extern_tools.mmd_tools_local.operators import morph as Morph
 from . import armature as Armature
 mmd_tools_local_installed = True
 
@@ -201,4 +201,3 @@ class ConvertAllToPngButton(bpy.types.Operator):
         bpy.data.images[image_name].name = image_name_new
 
         return True
-    

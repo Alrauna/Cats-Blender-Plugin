@@ -44,6 +44,11 @@ def get_vpd_export_preset_items(self, context):
 
 
 class MMDToolsAddonPreferences(bpy.types.AddonPreferences):
+    # Cats embeds these fields in its root extension preferences. The marker
+    # prevents the nested add-on preference class from being registered on its
+    # own, because Blender only creates a preference entry for the extension's
+    # root package.
+    _cats_embedded_preferences = True
     bl_idname = __package__
 
     enable_mmd_model_production_features: bpy.props.BoolProperty(

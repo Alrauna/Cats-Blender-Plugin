@@ -242,6 +242,20 @@ class FnSDEF:
         if "mmd_sdef_driver_wrap" not in bpy.app.driver_namespace:
             bpy.app.driver_namespace["mmd_sdef_driver_wrap"] = cls.driver_function_wrap
 
+    @classmethod
+    def unregister_driver_function(cls):
+        callbacks = {
+            "mmd_sdef_driver": cls.driver_function,
+            "mmd_sdef_driver_wrap": cls.driver_function_wrap,
+        }
+        for name, callback in callbacks.items():
+            installed = bpy.app.driver_namespace.get(name)
+            if (
+                getattr(installed, "__self__", None) is cls
+                and getattr(installed, "__func__", None) is getattr(callback, "__func__", None)
+            ):
+                del bpy.app.driver_namespace[name]
+
     BENCH_LOOP = 10
 
     @classmethod
@@ -333,3 +347,4 @@ class FnSDEF:
             cls.g_verts = {}
             cls.g_bone_check = {}
             cls.g_shapekey_data = {}
+            cls.__g_armature_check = {}

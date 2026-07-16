@@ -22,21 +22,37 @@ from .. import globs
 from ..extern_tools.google_trans_new.google_trans_new import google_translator
 from .translations import t
 
-from mmd_tools_local import translations as mmd_translations
+from ..extern_tools.mmd_tools_local import translations as mmd_translations
 
 dictionary = {}
 dictionary_google = {}
 
 main_dir = pathlib.Path(os.path.dirname(__file__)).parent.resolve()
-resources_dir = os.path.join(str(main_dir), "resources")
+bundled_resources_dir = os.path.join(str(main_dir), "resources")
+bundled_dictionary_file = os.path.join(bundled_resources_dir, "dictionary.json")
+bundled_dictionary_google_file = os.path.join(bundled_resources_dir, "dictionary_google.json")
+addon_package = __package__.rpartition('.')[0]
+
+
+def _user_storage_dir(path):
+    try:
+        return bpy.utils.extension_path_user(addon_package, path=path, create=True)
+    except (AttributeError, ValueError):
+        return bpy.utils.user_resource(
+            'CONFIG', path=os.path.join("cats_blender_plugin", path), create=True
+        )
+
+
+resources_dir = _user_storage_dir("resources")
 dictionary_file = os.path.join(resources_dir, "dictionary.json")
 dictionary_google_file = os.path.join(resources_dir, "dictionary_google.json")
 
 def get_cats_dir(context):
-    prefs = context.preferences.addons["cats-blender-plugin"].preferences
-    
-    if prefs.custom_shapekeys_export_dir: 
-        return prefs.custom_shapekeys_export_dir
+    addon = context.preferences.addons.get(addon_package)
+    if addon:
+        custom_export_dir = getattr(addon.preferences, 'custom_shapekeys_export_dir', '')
+        if custom_export_dir:
+            return custom_export_dir
     
     # Fallback to default cats directory
     return os.path.join(bpy.utils.user_resource('DATAFILES'), "cats") 
@@ -509,9 +525,10 @@ def load_translations():
     temp_dict = OrderedDict()
     dict_found = False
 
-    # Load internal dictionary
+    # Prefer a downloaded user override, then fall back to the bundled dictionary.
+    dictionary_source = dictionary_file if os.path.isfile(dictionary_file) else bundled_dictionary_file
     try:
-        with open(dictionary_file, encoding="utf8") as file:
+        with open(dictionary_source, encoding="utf8") as file:
             temp_dict = json.load(file, object_pairs_hook=collections.OrderedDict)
             dict_found = True
             # print('DICTIONARY LOADED!')
@@ -522,9 +539,15 @@ def load_translations():
         print("ERROR FOUND IN DICTIONARY")
         pass
 
-    # Load local google dictionary and add it to the temp dict
+    # Load the user's Google cache. Migrate a cache left by a legacy install once.
+    google_dictionary_source = dictionary_google_file
+    migrate_legacy_dictionary = False
+    if not os.path.isfile(google_dictionary_source) and os.path.isfile(bundled_dictionary_google_file):
+        google_dictionary_source = bundled_dictionary_google_file
+        migrate_legacy_dictionary = True
+
     try:
-        with open(dictionary_google_file, encoding="utf8") as file:
+        with open(google_dictionary_source, encoding="utf8") as file:
             global dictionary_google
             dictionary_google = json.load(file, object_pairs_hook=collections.OrderedDict)
 
@@ -542,6 +565,9 @@ def load_translations():
                         continue
 
                     temp_dict[name] = trans
+
+            if migrate_legacy_dictionary:
+                save_google_dict()
 
             # print('GOOGLE DICTIONARY LOADED!')
     except FileNotFoundError:
@@ -622,6 +648,15 @@ def update_dictionary(to_translate_list, translating_shapes=False, self=None):
 
     if not google_input:
         # print('NO GOOGLE TRANSLATIONS')
+        return
+
+    if not bpy.app.online_access:
+        print('ONLINE ACCESS DISABLED; SKIPPING GOOGLE TRANSLATE')
+        if self:
+            self.report(
+                {'WARNING'},
+                "Online access is disabled; Cats used only its local translation dictionary",
+            )
         return
 
     # Translate the rest with google translate
@@ -779,8 +814,11 @@ def reset_google_dict():
 
 
 def save_google_dict():
-    with open(dictionary_google_file, 'w', encoding="utf8") as outfile:
+    os.makedirs(resources_dir, exist_ok=True)
+    temporary_file = dictionary_google_file + ".tmp"
+    with open(temporary_file, 'w', encoding="utf8") as outfile:
         json.dump(dictionary_google, outfile, ensure_ascii=False, indent=4)
+    os.replace(temporary_file, dictionary_google_file)
 
 
 # Check if shape key meets translation conditions

@@ -19,9 +19,9 @@ bl_info = {
     "name": "mmd_tools_local",
     "author": "sugiany",
     "version": (5, 0, 0),
-    "blender": (4, 5, 2),
+    "blender": (5, 2, 0),
     "location": "View3D > Sidebar > MMD Panel",
-    "description": "Utility tools for MMD model editing. (UuuNyaa's forked version) - Blender 5.0 compatible",
+    "description": "Utility tools for MMD model editing. Bundled for Blender 5.2 LTS",
     "warning": "",
     "doc_url": "https://mmd-blender.fandom.com/wiki/mmd_tools_local",
     "wiki_url": "https://mmd-blender.fandom.com/wiki/mmd_tools_local",
@@ -38,7 +38,7 @@ PACKAGE_PATH = os.path.dirname(__file__)
 PACKAGE_NAME = __package__
 
 
-from mmd_tools_local import auto_load
+from . import auto_load
 
 auto_load.init(PACKAGE_NAME)
 
@@ -62,10 +62,16 @@ def unregister():
     import bpy
 
     from . import handlers
+    from .core.sdef import FnSDEF
 
     handlers.MMDHanders.unregister()
+    FnSDEF.unregister_driver_function()
+    FnSDEF.clear_cache()
 
-    bpy.app.translations.unregister(PACKAGE_NAME)
+    try:
+        bpy.app.translations.unregister(PACKAGE_NAME)
+    except (RuntimeError, ValueError):
+        pass
 
     auto_load.unregister()
 

@@ -8,7 +8,7 @@ import bpy
 class MMDHanders:
     @staticmethod
     @bpy.app.handlers.persistent
-    def load_hander(_):
+    def load_hander(_filepath, _context=None):
         # pylint: disable=import-outside-toplevel
         from .core.sdef import FnSDEF
 
@@ -34,7 +34,7 @@ class MMDHanders:
 
     @staticmethod
     @bpy.app.handlers.persistent
-    def save_pre_handler(_):
+    def save_pre_handler(_filepath, _context=None):
         # pylint: disable=import-outside-toplevel
         from .core.morph import MigrationFnMorph
 
@@ -42,10 +42,14 @@ class MMDHanders:
 
     @staticmethod
     def register():
-        bpy.app.handlers.load_post.append(MMDHanders.load_hander)
-        bpy.app.handlers.save_pre.append(MMDHanders.save_pre_handler)
+        if MMDHanders.load_hander not in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.append(MMDHanders.load_hander)
+        if MMDHanders.save_pre_handler not in bpy.app.handlers.save_pre:
+            bpy.app.handlers.save_pre.append(MMDHanders.save_pre_handler)
 
     @staticmethod
     def unregister():
-        bpy.app.handlers.save_pre.remove(MMDHanders.save_pre_handler)
-        bpy.app.handlers.load_post.remove(MMDHanders.load_hander)
+        if MMDHanders.save_pre_handler in bpy.app.handlers.save_pre:
+            bpy.app.handlers.save_pre.remove(MMDHanders.save_pre_handler)
+        if MMDHanders.load_hander in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.remove(MMDHanders.load_hander)

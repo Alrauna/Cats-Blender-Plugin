@@ -127,7 +127,7 @@ class MMDToolsModelSetupPanel(PT_PanelBase, bpy.types.Panel):
         row = col.row(align=False)
         row.label(text="IK Toggle:", icon="CON_KINEMATIC")
         grid = col.grid_flow(row_major=True, align=True)
-        grid.row(align=True).operator("mmd_tools.separate_by_parts", text="Sep by Parts", icon="MOD_EXPLODE")
+        grid.row(align=True).operator("mmd_tools_local.separate_by_parts", text="Sep by Parts", icon="MOD_EXPLODE")
 
         for ik, ic in self.__get_toggle_items(mmd_root_object):
             grid.row(align=True).prop(ik, "mmd_ik_toggle", text=ik.name, toggle=True, icon=ic)

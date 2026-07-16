@@ -1,46 +1,140 @@
-# This workflow will install Python dependencies, install all of the supported Blender versions and run tests against all of them
-
-name: Run CATS-Blender-Plugin tests
+name: Blender 5.2 validation
 
 on:
   push:
-    branches: [ "main", "dev", "forked_dev" ]
+    branches: [main, dev, forked_dev]
   pull_request:
-    branches: [ "main", "dev", "forked_dev" ]
+    branches: [main, dev, forked_dev]
   schedule:
     - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cats-blender-5-2-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BLENDER_VERSION: "5.2.0"
+  BLENDER_RELEASE_SERIES: "5.2"
 
 jobs:
-  build:
-
+  validate-build-test:
+    name: Validate, package, install, and test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.9"]
+    timeout-minutes: 45
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install Blender versions with snap
-      run: |
-        sudo snap set system experimental.parallel-instances=true
-        sudo snap install blender_36 --channel 3.6lts/stable --classic
-        sudo snap install blender_40 --channel 4.0/stable --classic
-        sudo snap install blender_stable --stable --classic
-    - name: install cats plugin for various versions
-      run: |
-        mkdir -p ${HOME}/.config/blender/{3.6,3.7,3.8,3.9,4.0}/scripts/addons
-        ln -s ${PWD} ${HOME}/.config/blender/3.6/scripts/addons/cats
-        ln -s ${PWD} ${HOME}/.config/blender/3.7/scripts/addons/cats
-        ln -s ${PWD} ${HOME}/.config/blender/3.8/scripts/addons/cats
-        ln -s ${PWD} ${HOME}/.config/blender/3.9/scripts/addons/cats
-        ln -s ${PWD} ${HOME}/.config/blender/4.0/scripts/addons/cats
-    - name: run unit tests for all versions
-      run: |
-        python3 ./tests/run.py --blend=blender_36 -c True || exit 1
-        python3 ./tests/run.py --blend=blender_40 -c True || exit 1
-        python3 ./tests/run.py --blend=blender_stable -c True || exit 1
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up host Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check Python syntax
+        run: python -W ignore::SyntaxWarning -m compileall -q -f .
+
+      - name: Download Blender 5.2 LTS
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          url="https://download.blender.org/release/Blender${BLENDER_RELEASE_SERIES}/${archive}"
+          curl --fail --location --retry 3 --retry-all-errors --output "${RUNNER_TEMP}/${archive}" "${url}"
+          tar -xf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}"
+          blender_bin="${RUNNER_TEMP}/blender-${BLENDER_VERSION}-linux-x64/blender"
+          test -x "${blender_bin}"
+          echo "BLENDER_BIN=${blender_bin}" >> "${GITHUB_ENV}"
+
+      - name: Verify Blender version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(${BLENDER_BIN} --version | head -n 1)"
+          echo "${version}"
+          [[ "${version}" == "Blender ${BLENDER_RELEASE_SERIES}"* ]]
+
+      - name: Validate extension source
+        run: $BLENDER_BIN --command extension validate .
+
+      - name: Build and validate extension package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path="${RUNNER_TEMP}/cats_blender_plugin.zip"
+          "${BLENDER_BIN}" --command extension build --source-dir . --output-filepath "${package_path}"
+          "${BLENDER_BIN}" --command extension validate "${package_path}"
+          python tests/verify_package.py "${package_path}" --source-dir .
+          echo "PACKAGE_PATH=${package_path}" >> "${GITHUB_ENV}"
+
+      - name: Create isolated extension repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BLENDER_USER_RESOURCES="${RUNNER_TEMP}/blender-user/resources"
+          export BLENDER_USER_CONFIG="${RUNNER_TEMP}/blender-user/config"
+          export BLENDER_USER_SCRIPTS="${RUNNER_TEMP}/blender-user/scripts"
+          export BLENDER_USER_EXTENSIONS="${RUNNER_TEMP}/blender-user/extensions"
+          export BLENDER_USER_DATAFILES="${RUNNER_TEMP}/blender-user/datafiles"
+          echo "BLENDER_USER_RESOURCES=${BLENDER_USER_RESOURCES}" >> "${GITHUB_ENV}"
+          echo "BLENDER_USER_CONFIG=${BLENDER_USER_CONFIG}" >> "${GITHUB_ENV}"
+          echo "BLENDER_USER_SCRIPTS=${BLENDER_USER_SCRIPTS}" >> "${GITHUB_ENV}"
+          echo "BLENDER_USER_EXTENSIONS=${BLENDER_USER_EXTENSIONS}" >> "${GITHUB_ENV}"
+          echo "BLENDER_USER_DATAFILES=${BLENDER_USER_DATAFILES}" >> "${GITHUB_ENV}"
+          mkdir -p "${BLENDER_USER_RESOURCES}" "${BLENDER_USER_CONFIG}" \
+            "${BLENDER_USER_SCRIPTS}" "${BLENDER_USER_EXTENSIONS}" "${BLENDER_USER_DATAFILES}"
+          mkdir -p "${RUNNER_TEMP}/blender-extensions"
+          "${BLENDER_BIN}" --command extension repo-add \
+            --name "CATS CI" \
+            --directory "${RUNNER_TEMP}/blender-extensions" \
+            --clear-all \
+            cats_ci
+
+      - name: Install and enable built extension
+        run: $BLENDER_BIN --command extension install-file --repo cats_ci --enable "$PACKAGE_PATH"
+
+      - name: Verify installed extension registration
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/extension_smoke.py
+          -- --expect-enabled
+
+      - name: Exercise Blender 5.2 API compatibility surfaces
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/blender_52_api_smoke.py
+
+      - name: Run armature tests
+        run: >-
+          python tests/run.py --blend "$BLENDER_BIN"
+          --test "./tests/armatures/*"
+          --bfile "./tests/armatures/armature.*"
+          --ci
+
+      - name: Run shape-key tests
+        run: >-
+          python tests/run.py --blend "$BLENDER_BIN"
+          --test "./tests/shapekeys/shape_key_to_basis"
+          --bfile "./tests/shapekeys/shapekey.shape_key_to_basis"
+          --ci
+
+      - name: Remove extension
+        run: $BLENDER_BIN --command extension remove cats_blender_plugin
+
+      - name: Verify extension removal
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/extension_smoke.py
+          -- --expect-absent
+
+      - name: Upload tested package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cats-blender-plugin-${{ env.BLENDER_VERSION }}
+          path: ${{ runner.temp }}/cats_blender_plugin.zip
+          if-no-files-found: error
+          retention-days: 7

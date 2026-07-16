@@ -185,11 +185,11 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
 
         # Reset object visibility
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools.reset_object_visibility()
+        bpy.ops.mmd_tools_local.reset_object_visibility()
 
         # Clean additional transform
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools.clean_additional_transform()
+        bpy.ops.mmd_tools_local.clean_additional_transform()
 
         # Create new separate model first
         separate_model: Model = Model.create(mmd_root_object.mmd_root.name, mmd_root_object.mmd_root.name_e, mmd_scale, obj_name=mmd_root_object.name, add_root_bone=False)
@@ -326,9 +326,9 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
 
         # Apply additional transform
         FnContext.set_active_and_select_single_object(context, mmd_root_object)
-        bpy.ops.mmd_tools.apply_additional_transform()
+        bpy.ops.mmd_tools_local.apply_additional_transform()
         FnContext.set_active_and_select_single_object(context, separate_root_object)
-        bpy.ops.mmd_tools.apply_additional_transform()
+        bpy.ops.mmd_tools_local.apply_additional_transform()
 
         # Restore original transform matrix for root object
         mmd_root_object.matrix_world = original_matrix_world
@@ -435,4 +435,3 @@ class ModelSeparateByBonesOperator(bpy.types.Operator):
         # Apply the final selection
         for bone in edit_bones:
             bone.select = bone.name in final_selection_names
-            

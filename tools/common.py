@@ -25,7 +25,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from functools import lru_cache
 from html.entities import name2codepoint
-from typing import Optional, Set, Dict, Any
+from typing import Optional, Any
 
 from . import common as Common
 from . import iconloader as Iconloader
@@ -36,14 +36,33 @@ from .register import register_wrap
 from .translations import t
 from sys import intern
 
-from mmd_tools_local import utils
-
-def version_3_6_or_older():
-    return bpy.app.version < (3, 7)
-
+from ..extern_tools.mmd_tools_local import utils
 
 def get_objects():
     return bpy.context.view_layer.objects
+
+
+def has_shared_object_data(obj):
+    """Return whether more than one object uses the object's data-block.
+
+    ID.users also counts RNA pointer properties. Bundled MMD material morphs
+    legitimately point at their related mesh data, so using ID.users here can
+    reject a mesh even when Object > Relations > Make Single User has nothing
+    to change.
+    """
+    data = getattr(obj, 'data', None)
+    if data is None:
+        return False
+
+    data_pointer = data.as_pointer()
+    object_users = 0
+    for candidate in bpy.data.objects:
+        candidate_data = getattr(candidate, 'data', None)
+        if candidate_data is not None and candidate_data.as_pointer() == data_pointer:
+            object_users += 1
+            if object_users > 1:
+                return True
+    return False
 
 
 def get_enum_property_value(property_holder, property_name, items_func=None):
@@ -345,10 +364,6 @@ def set_default_stage():
 
 
 def apply_modifier(mod, as_shapekey=False):
-    if bpy.app.version < (2, 90):
-        bpy.ops.object.modifier_apply(apply_as='SHAPE' if as_shapekey else 'DATA', modifier=mod.name)
-        return
-
     if as_shapekey:
         bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=mod.name)
     else:
@@ -848,7 +863,7 @@ def join_meshes(armature_name=None, mode=0, apply_transformations=True, repair_s
 
     # Check if all meshes are single user
     for mesh in meshes_to_join:
-        if mesh.data.users > 1:
+        if has_shared_object_data(mesh):
             show_error(4, [t('JoinMeshes.error.not_single_user'),
                            t('JoinMeshes.error.make_single_user'),
                            t('JoinMeshes.error.make_single_user1'),
@@ -1129,16 +1144,17 @@ def save_shapekey_order(mesh_name):
     if not armature:
         return
 
-    # Get current custom data
-    # In Blender 5.0, use bl_system_properties_get() to access IDProperties
-    sys_props = armature.bl_system_properties_get()
-    if not sys_props:
-        return
-    
-    custom_data = sys_props.get('CUSTOM')
-    
-    if not custom_data:
-        # print('NEW DATA!')
+    # Blender ID custom properties use the mapping interface.  The
+    # bl_system_properties_get() method is debug-only and must not be used for
+    # regular add-on data.
+    custom_data = armature.get('CUSTOM')
+    if custom_data is None:
+        custom_data = {}
+    elif hasattr(custom_data, 'to_dict'):
+        custom_data = custom_data.to_dict()
+    elif hasattr(custom_data, 'items'):
+        custom_data = dict(custom_data.items())
+    else:
         custom_data = {}
 
     # Create shapekey order
@@ -1164,11 +1180,8 @@ def save_shapekey_order(mesh_name):
     # print('SAVE NEW ORDER')
     custom_data['shape_key_order'] = shape_key_order
 
-    # Save custom data in armature
-    # In Blender 5.0, use bl_system_properties_get() for custom properties
-    sys_props = armature.bl_system_properties_get()
-    if sys_props:
-        sys_props['CUSTOM'] = custom_data
+    # Save through the public ID-property mapping API.
+    armature['CUSTOM'] = custom_data
 
     # print(armature.get('CUSTOM').get('shape_key_order'))
 
@@ -1182,18 +1195,16 @@ def repair_shapekey_order(mesh_name, armature_name=None):
     if not armature:
         return
     
-    # In Blender 5.0, use bl_system_properties_get() to access IDProperties
-    sys_props = armature.bl_system_properties_get()
-    if not sys_props:
-        return
-    
     # Early return if no custom data exists
-    if 'CUSTOM' not in sys_props:
+    if 'CUSTOM' not in armature:
         return
-    
-    custom_data = sys_props.get('CUSTOM', {})
-    
-    if not isinstance(custom_data, dict):
+
+    custom_data = armature.get('CUSTOM', {})
+    if hasattr(custom_data, 'to_dict'):
+        custom_data = custom_data.to_dict()
+    elif hasattr(custom_data, 'items'):
+        custom_data = dict(custom_data.items())
+    else:
         return
 
     # Extract shape keys from string, using an empty list as default
@@ -1201,13 +1212,11 @@ def repair_shapekey_order(mesh_name, armature_name=None):
 
     if not shape_key_order:
         custom_data['shape_key_order'] = []
-        if sys_props:
-            sys_props['CUSTOM'] = custom_data
+        armature['CUSTOM'] = custom_data
     elif isinstance(shape_key_order, str):
         shape_key_order_temp = shape_key_order.split(',,,')
         custom_data['shape_key_order'] = shape_key_order_temp
-        if sys_props:
-            sys_props['CUSTOM'] = custom_data
+        armature['CUSTOM'] = custom_data
 
     # Only call sort_shape_keys if shape_key_order is not empty
     if custom_data.get('shape_key_order'):
@@ -1736,7 +1745,7 @@ def mix_weights(mesh, vg_from, vg_to, mix_strength=1.0, mix_mode='ADD', mix_set=
 
 
 def get_user_preferences():
-    return bpy.context.user_preferences if hasattr(bpy.context, 'user_preferences') else bpy.context.preferences
+    return bpy.context.preferences
 
 
 def has_shapekeys(mesh):
@@ -2447,38 +2456,19 @@ def wrap_dynamic_enum_items(items_func, property_name, sort=True, in_place=True,
 
     return wrapped_items_func
     
-if bpy.app.version >= (3, 2):
-    # Passing in context_override as a positional-only argument is deprecated as of Blender 3.2, replaced with
-    # Context.temp_override
-    def op_override(operator, context_override: dict[str, Any], context: Optional[bpy.types.Context] = None,
-                    execution_context: Optional[str] = None,
-                    undo: Optional[bool] = None, **operator_args) -> set[str]:
-        """Call an operator with a context override"""
-        args = []
-        if execution_context is not None:
-            args.append(execution_context)
-        if undo is not None:
-            args.append(undo)
+def op_override(operator, context_override: dict[str, Any], context: Optional[bpy.types.Context] = None,
+                execution_context: Optional[str] = None,
+                undo: Optional[bool] = None, **operator_args) -> set[str]:
+    """Call an operator using Blender's current context override API."""
+    args = []
+    if execution_context is not None:
+        args.append(execution_context)
+    if undo is not None:
+        args.append(undo)
 
-        if context is None:
-            context = bpy.context
-        with context.temp_override(**context_override):
-            return operator(*args, **operator_args)
-else:
-    def op_override(operator, context_override: Dict[str, Any], context: Optional[bpy.types.Context] = None,
-                    execution_context: Optional[str] = None,
-                    undo: Optional[bool] = None, **operator_args) -> Set[str]:
-        """Call an operator with a context override"""
-        if context is not None:
-            context_base = context.copy()
-            context_base.update(context_override)
-            context_override = context_base
-        args = [context_override]
-        if execution_context is not None:
-            args.append(execution_context)
-        if undo is not None:
-            args.append(undo)
-
+    if context is None:
+        context = bpy.context
+    with context.temp_override(**context_override):
         return operator(*args, **operator_args)
 
 def set_material_shading():
@@ -2491,8 +2481,7 @@ def set_material_shading():
                     space.shading.studio_light = 'forest.exr'
                     space.shading.studiolight_rotate_z = 0.0
                     space.shading.studiolight_background_alpha = 0.0
-                    if bpy.app.version >= (2, 82):
-                        space.shading.render_pass = 'COMBINED'
+                    space.shading.render_pass = 'COMBINED'
 
 def clear_unused_data():
     """

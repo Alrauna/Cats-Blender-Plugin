@@ -1,53 +1,26 @@
 # GPL License
 
-import unittest
 import sys
+import unittest
+
 import bpy
 
 
 class TestAddon(unittest.TestCase):
-    filename = bpy.path.basename(bpy.context.blend_data.filepath)
+    def test_eye_tracking_operator_is_registered(self):
+        self.assertIsNotNone(bpy.ops.cats_eyes.create_eye_tracking.get_rna_type())
 
-    def test_eye_tracking(self):
-        return
-        bpy.ops.cats_armature.fix()
-        if self.filename == 'armature.mmd1.blend':
-            bpy.context.scene.eye_left = 'Eye_L'
-            bpy.context.scene.eye_right = 'Eye_R'
-
-        if self.filename == 'armature.bonetranslationerror.blend':
-            bpy.context.scene.eye_left = 'Eye_L'
-            bpy.context.scene.eye_right = 'Eye_R'
-
-        bpy.context.scene.disable_eye_movement = False
-        bpy.context.scene.disable_eye_blinking = False
-
-        result = bpy.ops.cats_eyes.create.create_eye_tracking()
-        self.assertTrue(result == {'FINISHED'})
-
-    def test_eye_tracking_no_movement(self):
-        return
-        if self.filename == 'armature.bonetranslationerror.blend':
-            bpy.context.scene.eye_left = 'Eye_L'
-            bpy.context.scene.eye_right = 'Eye_R'
-
-        bpy.context.scene.disable_eye_movement = True
-        bpy.context.scene.disable_eye_blinking = False
-
-        result = bpy.ops.cats_eyes.create.create_eye_tracking()
-        self.assertTrue(result == {'FINISHED'})
-
-    def test_eye_tracking_no_blinking(self):
-        return
-        if self.filename == 'armature.bonetranslationerror.blend':
-            bpy.context.scene.eye_left = 'Eye_L'
-            bpy.context.scene.eye_right = 'Eye_R'
-
-        bpy.context.scene.disable_eye_movement = False
-        bpy.context.scene.disable_eye_blinking = True
-
-        result = bpy.ops.cats_eyes.create.create_eye_tracking()
-        self.assertTrue(result == {'FINISHED'})
+    def test_eye_tracking_is_unavailable_when_all_outputs_are_disabled(self):
+        scene = bpy.context.scene
+        original_movement = scene.disable_eye_movement
+        original_blinking = scene.disable_eye_blinking
+        try:
+            scene.disable_eye_movement = True
+            scene.disable_eye_blinking = True
+            self.assertFalse(bpy.ops.cats_eyes.create_eye_tracking.poll())
+        finally:
+            scene.disable_eye_movement = original_movement
+            scene.disable_eye_blinking = original_blinking
 
 
 suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestAddon)

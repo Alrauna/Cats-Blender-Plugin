@@ -1,26 +1,16 @@
 # GPL License
 
 import bpy
-import typing
 
 __bl_classes = []
 __bl_ordered_classes = []
-
-
-def _dummy_operator_poll_message_set(message, *args):
-    """Operator.poll_message_set was added in Blender 3.0. We add this function to Operator subclasses when it's not
-    present so that code that wants to use poll_message_set won't cause errors on older Blender versions"""
-    pass
+__bl_registered_classes = []
 
 
 def register_wrap(cls):
-    if issubclass(cls, bpy.types.Operator) and not hasattr(cls, "poll_message_set"):
-        # poll_message_set was added in Blender 3.0. To be able to use it on 3.0+, without causing errors on older
-        # Blender versions, we need to add a dummy function under the same attribute name to the class.
-        cls.poll_message_set = _dummy_operator_poll_message_set
-    if hasattr(cls, 'bl_rna'):
-        __bl_classes.append(cls)
     cls = make_annotations(cls)
+    if hasattr(cls, 'bl_rna') and cls not in __bl_classes:
+        __bl_classes.append(cls)
     return cls
 
 
@@ -38,21 +28,71 @@ def make_annotations(cls):
 
 def order_classes():
     global __bl_ordered_classes
+    classes_to_register = list(dict.fromkeys(iter_classes_to_register()))
+    own_classes = set(classes_to_register)
     deps_dict = {}
-    classes_to_register = set(iter_classes_to_register())
     for cls in classes_to_register:
-        deps_dict[cls] = set(iter_own_register_deps(cls, classes_to_register))
+        deps_dict[cls] = set(iter_own_register_deps(cls, own_classes))
 
-    # Put all the UI into the list first
-    __bl_ordered_classes = []
-    for cls in __bl_classes:
-        if cls.__module__.startswith('ui.'):
-            __bl_ordered_classes.append(cls)
+    # Preserve module discovery order for unrelated classes, while preferring
+    # operators and property groups before UI classes. Extension modules are
+    # namespaced as bl_ext.<repository>.<extension>.ui.*, so checking only for
+    # a module name that starts with "ui." is not sufficient.
+    __bl_ordered_classes = toposort(deps_dict, classes_to_register)
+    return tuple(__bl_ordered_classes)
 
-    # Then put everything else sorted into the list
-    for cls in toposort(deps_dict):
-        if not cls.__module__.startswith('ui.'):
-            __bl_ordered_classes.append(cls)
+
+def register_classes():
+    global __bl_registered_classes
+
+    if __bl_registered_classes:
+        raise RuntimeError("CATS classes are already registered")
+
+    ordered_classes = order_classes()
+    registered_classes = []
+    try:
+        for cls in ordered_classes:
+            bpy.utils.register_class(cls)
+            registered_classes.append(cls)
+    except Exception as exc:
+        for registered_cls in reversed(registered_classes):
+            try:
+                bpy.utils.unregister_class(registered_cls)
+            except Exception as rollback_exc:
+                print(
+                    "CATS: failed to roll back class "
+                    f"{registered_cls.__module__}.{registered_cls.__name__}: {rollback_exc}"
+                )
+        failed_class = f"{cls.__module__}.{cls.__name__}"
+        raise RuntimeError(f"CATS failed to register class {failed_class}") from exc
+
+    __bl_registered_classes = registered_classes
+    return len(registered_classes)
+
+
+def unregister_classes():
+    global __bl_registered_classes
+
+    classes_to_unregister = list(reversed(__bl_registered_classes))
+    errors = []
+    count = 0
+
+    for cls in classes_to_unregister:
+        try:
+            bpy.utils.unregister_class(cls)
+            count += 1
+        except Exception as exc:
+            errors.append((cls, exc))
+
+    # Retain failed classes in their original registration order so a second
+    # cleanup attempt can retry them instead of losing track of Blender state.
+    __bl_registered_classes = list(reversed([cls for cls, _ in errors]))
+
+    if errors:
+        failed_names = ", ".join(f"{cls.__module__}.{cls.__name__}" for cls, _ in errors)
+        raise RuntimeError(f"CATS failed to unregister classes: {failed_names}") from errors[0][1]
+
+    return count
 
 
 def iter_classes_to_register():
@@ -65,32 +105,51 @@ def iter_own_register_deps(cls, own_classes):
 
 
 def iter_register_deps(cls):
-    for value in typing.get_type_hints(cls, {}, {}).values():
+    for value in getattr(cls, '__annotations__', {}).values():
         dependency = get_dependency_from_annotation(value)
         if dependency is not None:
             yield dependency
 
 
 def get_dependency_from_annotation(value):
+    if isinstance(value, bpy.props._PropertyDeferred):
+        if value.function in (bpy.props.PointerProperty, bpy.props.CollectionProperty):
+            return value.keywords.get("type")
     if isinstance(value, tuple) and len(value) == 2:
         if value[0] in (bpy.props.PointerProperty, bpy.props.CollectionProperty):
-            return value[1]["type"]
+            return value[1].get("type")
     return None
 
 
 # Find order to register to solve dependencies
 #################################################
 
-def toposort(deps_dict):
+def _is_ui_class(cls):
+    return 'ui' in cls.__module__.split('.')
+
+
+def toposort(deps_dict, discovery_order=None):
+    deps_dict = {value: set(deps) for value, deps in deps_dict.items()}
+    discovery_order = discovery_order or list(deps_dict)
+    order_index = {cls: index for index, cls in enumerate(discovery_order)}
     sorted_list = []
-    sorted_values = set()
-    while len(deps_dict) > 0:
-        unsorted = []
-        for value, deps in deps_dict.items():
-            if len(deps) == 0:
-                sorted_list.append(value)
-                sorted_values.add(value)
-            else:
-                unsorted.append(value)
-        deps_dict = {value : deps_dict[value] - sorted_values for value in unsorted}
+
+    while deps_dict:
+        ready = [value for value, deps in deps_dict.items() if not deps]
+        if not ready:
+            unresolved = ', '.join(
+                f"{value.__module__}.{value.__name__}"
+                for value in sorted(deps_dict, key=lambda cls: order_index.get(cls, 0))
+            )
+            raise RuntimeError(f"Cyclic CATS class registration dependencies: {unresolved}")
+
+        ready.sort(key=lambda cls: (_is_ui_class(cls), order_index.get(cls, 0)))
+        next_class = ready[0]
+        sorted_list.append(next_class)
+        deps_dict = {
+            value: deps - {next_class}
+            for value, deps in deps_dict.items()
+            if value is not next_class
+        }
+
     return sorted_list

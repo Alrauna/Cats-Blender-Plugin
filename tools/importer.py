@@ -21,16 +21,17 @@ from . import settings as Settings
 from ..tools import iconloader as Iconloader
 from .register import register_wrap
 from .translations import t
-from mmd_tools_local.utils import makePmxBoneMap
-from mmd_tools_local.core.vmd import importer as vmd_importer
-from mmd_tools_local.translations import DictionaryEnum
-from mmd_tools_local import auto_scene_setup
+from ..extern_tools.mmd_tools_local.utils import makePmxBoneMap
+from ..extern_tools.mmd_tools_local.core.vmd import importer as vmd_importer
+from ..extern_tools.mmd_tools_local.compat.action_compat import assign_action_to_datablock
+from ..extern_tools.mmd_tools_local.translations import DictionaryEnum
+from ..extern_tools.mmd_tools_local import auto_scene_setup
 
 current_blender_version = str(bpy.app.version[:2])[1:-1].replace(', ', '.')
 
 mmd_tools_local_installed = False
 try:
-    import mmd_tools_local
+    from ..extern_tools import mmd_tools_local
     mmd_tools_local_installed = True
 except:
     pass
@@ -189,13 +190,19 @@ class ImportAnyModel(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
 
         # DAE
         elif file_ending == 'dae':
+            collada_import = bpy.ops.wm.collada_import
             try:
-                bpy.ops.wm.collada_import('EXEC_DEFAULT',
-                                          filepath=file_path,
-                                          fix_orientation=True,
-                                          auto_connect=True)
+                collada_import.get_rna_type()
+            except (AttributeError, KeyError, RuntimeError):
+                Common.show_error(5, [t('ImportAnyModel.error.colladaUnavailable')])
+                return
+            try:
+                collada_import('EXEC_DEFAULT',
+                               filepath=file_path,
+                               fix_orientation=True,
+                               auto_connect=True)
             except (TypeError, ValueError):
-                bpy.ops.wm.collada_import('INVOKE_DEFAULT')
+                collada_import('INVOKE_DEFAULT')
 
         # ZIP
         elif file_ending == 'zip':
@@ -522,14 +529,14 @@ class ImportMMDAnimation(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
             if armature.animation_data == None :
                 armature.animation_data_create()
             if armature.animation_data.action == None:
-                armature.animation_data.action = bpy.data.actions.new("MMD Animation")
+                assign_action_to_datablock(armature, bpy.data.actions.new("MMD Animation"))
 
 
             #create animation for new if there isn't one.
             if new_armature.animation_data == None :
                 new_armature.animation_data_create()
             if new_armature.animation_data.action == None:
-                new_armature.animation_data.action = bpy.data.actions.new("EMPTY_SOURCE")
+                assign_action_to_datablock(new_armature, bpy.data.actions.new("EMPTY_SOURCE"))
 
             active_obj = new_armature
             ad = armature.animation_data
@@ -541,7 +548,7 @@ class ImportMMDAnimation(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
                     bone.name = reverse_bonedict[bone.name] #reverse name of bone from value in dictionary back to a key to change the animation.
 
             #assign animation back to original rig.
-            armature.animation_data.action = new_armature.animation_data.action
+            assign_action_to_datablock(armature, new_armature.animation_data.action)
 
             #make sure our new armature is selected
             Common.unselect_all()
@@ -973,10 +980,7 @@ class ExportGmodPlayermodel(bpy.types.Operator):
         Common.switch('OBJECT')
         Common.unselect_all()
         Common.set_active(barney_armature)
-        bpy.ops.object.duplicate(
-        {"object" : barney_armature,
-         "selected_objects" : [barney_armature]},
-        linked=False)
+        bpy.ops.object.duplicate(linked=False)
         barney_armature = context.object
 
         def children_bone_recursive(parent_bone):
@@ -1616,7 +1620,7 @@ $sequence \"proportions\"{
                 body_armature.animation_data_create()
             except:
                 pass
-            body_armature.animation_data.action = bpy.data.actions["idle"]
+            assign_action_to_datablock(body_armature, bpy.data.actions["idle"])
         else:
             Common.unselect_all()
             Common.set_active(body_armature)
@@ -1624,7 +1628,7 @@ $sequence \"proportions\"{
                 body_armature.animation_data_create()
             except:
                 pass
-            body_armature.animation_data.action = bpy.data.actions.new(name="idle")
+            assign_action_to_datablock(body_armature, bpy.data.actions.new(name="idle"))
 
         Common.unselect_all()
         Common.set_active(body_armature,True)
@@ -1809,7 +1813,7 @@ player_manager.AddValidHands( \""""+offical_model_name+"""\", \""""+"models/"+sa
                 body_armature.animation_data_create()
             except:
                 pass
-            body_armature.animation_data.action = bpy.data.actions["idle_arms"]
+            assign_action_to_datablock(body_armature, bpy.data.actions["idle_arms"])
         else:
             Common.unselect_all()
             Common.set_active(body_armature)
@@ -1817,7 +1821,7 @@ player_manager.AddValidHands( \""""+offical_model_name+"""\", \""""+"models/"+sa
                 body_armature.animation_data_create()
             except:
                 pass
-            body_armature.animation_data.action = bpy.data.actions.new(name="idle_arms")
+            assign_action_to_datablock(body_armature, bpy.data.actions.new(name="idle_arms"))
 
         Common.unselect_all()
         Common.set_active(body_armature)
@@ -2181,10 +2185,10 @@ class ImportMMDAnimationNew(bpy.types.Operator, bpy_extras.io_utils.ImportHelper
             
             # Call the MMD Tools VMD importer directly with the file we selected
             # and the parameters we set in the UI
-            from mmd_tools_local.core.vmd import importer as vmd_importer
-            from mmd_tools_local import auto_scene_setup
-            from mmd_tools_local.utils import makePmxBoneMap
-            from mmd_tools_local.translations import DictionaryEnum
+            from ..extern_tools.mmd_tools_local.core.vmd import importer as vmd_importer
+            from ..extern_tools.mmd_tools_local import auto_scene_setup
+            from ..extern_tools.mmd_tools_local.utils import makePmxBoneMap
+            from ..extern_tools.mmd_tools_local.translations import DictionaryEnum
             
             bone_mapper = None
             if self.bone_mapper == "PMX":
@@ -2240,24 +2244,14 @@ class Cats_OT_ExportResonite(bpy.types.Operator):
         return False
 
     def execute(self, context: bpy.types.Context):
-        if bpy.app.version[0] < 4:
-            bpy.ops.export_scene.gltf('INVOKE_AREA',
-                export_image_format = 'JPEG',
-                export_jpeg_quality = 75,
-                export_materials = 'EXPORT',
-                export_animations = True,
-                export_animation_mode = 'ACTIONS',
-                export_nla_strips_merged_animation_name = 'Animation',
-                export_nla_strips = True)            
-        else:
-            bpy.ops.export_scene.gltf('INVOKE_AREA',
-                export_image_format = 'WEBP',
-                export_image_quality = 75,
-                export_materials = 'EXPORT',
-                export_animations = True,
-                export_animation_mode = 'ACTIONS',
-                export_nla_strips_merged_animation_name = 'Animation',
-                export_nla_strips = True)
+        bpy.ops.export_scene.gltf('INVOKE_AREA',
+            export_image_format = 'WEBP',
+            export_image_quality = 75,
+            export_materials = 'EXPORT',
+            export_animations = True,
+            export_animation_mode = 'ACTIONS',
+            export_nla_strips_merged_animation_name = 'Animation',
+            export_nla_strips = True)
         return {'FINISHED'}
 
 

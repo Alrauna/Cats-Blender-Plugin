@@ -128,7 +128,7 @@ class CleanShapeKeys(bpy.types.Operator):
         return {"FINISHED"}
 
 class SeparateByParts(bpy.types.Operator):
-    bl_idname = "mmd_tools.separate_by_parts"
+    bl_idname = "mmd_tools_local.separate_by_parts"
     bl_label = "Sep by Parts"
     bl_description = "Separate by loose parts and join by materials.\nThis preserves vertex count."
     bl_options = {"REGISTER", "UNDO"}
@@ -152,7 +152,7 @@ class SeparateByParts(bpy.types.Operator):
     def __separate_by_parts(self, obj):
         utils.separateByParts(obj, self.keep_normals)
         if self.clean_shape_keys:
-            bpy.ops.mmd_tools.clean_shape_keys()
+            bpy.ops.mmd_tools_local.clean_shape_keys()
 
     def execute(self, context):
         obj = context.active_object
@@ -166,8 +166,8 @@ class SeparateByParts(bpy.types.Operator):
         if root is None:
             self.__separate_by_parts(obj)
         else:
-            bpy.ops.mmd_tools.clear_temp_materials()
-            bpy.ops.mmd_tools.clear_uv_morph_view()
+            bpy.ops.mmd_tools_local.clear_temp_materials()
+            bpy.ops.mmd_tools_local.clear_uv_morph_view()
 
             # Store the current material names
             rig = Model(root)

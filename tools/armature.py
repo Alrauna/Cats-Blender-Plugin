@@ -11,7 +11,6 @@ from . import common as Common
 from . import material as Material
 from . import translate as Translate
 from . import armature_bones as Bones
-from .common import version_3_6_or_older
 from .register import register_wrap
 from .translations import t
 
@@ -19,7 +18,7 @@ from .translations import t
 mmd_tools_local_installed = False
 if platform.system() != "Linux":
     try:
-        from mmd_tools_local.operators import morph as Morph
+        from ..extern_tools.mmd_tools_local.operators import morph as Morph
         mmd_tools_local_installed = True
     except ImportError:
         pass
@@ -311,8 +310,10 @@ class FixArmature(bpy.types.Operator):
             Common.switch('OBJECT')
             
             # Now safely remove collections in OBJECT mode
-            for collection in list(armature.data.collections):
-                armature.data.collections.remove(collection)
+            while armature.data.collections:
+                # Removing a parent promotes its children, so keep consuming the
+                # top-level collection list until nested collections are gone too.
+                armature.data.collections.remove(armature.data.collections[0])
         
         # Check for Rigify/Metarig
         is_rigify = False
@@ -339,7 +340,7 @@ class FixArmature(bpy.types.Operator):
         # Check if all meshes are single user
         meshes_to_check = Common.get_meshes_objects()
         for mesh in meshes_to_check:
-            if mesh.data.users > 1:
+            if Common.has_shared_object_data(mesh):
                 Common.show_error(4, [t('JoinMeshes.error.not_single_user'),
                                     t('JoinMeshes.error.make_single_user'),
                                     t('JoinMeshes.error.make_single_user1'),
@@ -641,10 +642,6 @@ class FixArmature(bpy.types.Operator):
                 mesh.lock_rotation[i] = False
                 mesh.lock_scale[i] = False
 
-            # Set layer of mesh to 0
-            if hasattr(mesh, 'layers'):
-                mesh.layers[0] = True
-
             # Fix Source Shapekeys
             if source_engine and Common.has_shapekeys(mesh):
                 mesh.data.shape_keys.key_blocks[0].name = "Basis"
@@ -720,15 +717,11 @@ class FixArmature(bpy.types.Operator):
         # Switch to OBJECT mode before removing bone collections to avoid crashes
         Common.switch('OBJECT')
 
-        # Remove Bone Groups
-        # Replaced in 4.0 with Bone Collections (Armature.collections), which also subsumed Armature.layers. Bone colors
-        # are now defined per-bone, Bone.color.palette and PoseBone.color.palette
-        if Common.version_3_6_or_older():
-            for group in armature.pose.bone_groups:
-                armature.pose.bone_groups.remove(group)
-        else:
-            for collection in list(armature.data.collections):
-                armature.data.collections.remove(collection)
+        # Bone Collections replaced pose bone groups and armature layers.
+        while armature.data.collections:
+            # Removing a parent promotes its children, so keep consuming the
+            # top-level collection list until nested collections are gone too.
+            armature.data.collections.remove(armature.data.collections[0])
 
         # Re-enter EDIT mode for subsequent operations
         Common.switch('EDIT')
@@ -743,27 +736,15 @@ class FixArmature(bpy.types.Operator):
         # Count steps for loading bar again and reset the layers
         steps += len(armature.data.edit_bones)
         
-        # Handle bone visibility based on Blender version
-        if Common.version_3_6_or_older():
-            # For Blender 3.6 or older, use bone layers
-            for bone in armature.data.edit_bones:
-                bone.layers[0] = True
-        else:
-            # For Blender 4.0+, use bone collections
-            bone_collections = armature.data.collections
-            if bone_collections:
-                # The default collection on new Armatures is called "Bones" and usually has all bones assigned to it.
-                default_collection_name = "Bones"
-                bone_collection = bone_collections.get(default_collection_name)
-                if bone_collection is None:
-                    # The default "Bones" collection does not exist, create it.
-                    bone_collection = bone_collections.new(default_collection_name)
-                # Ensure the collection is visible.
-                bone_collection.is_visible = True
-                
-                # Assign all bones to the default collection
-                for bone in armature.data.edit_bones:
-                    bone_collection.assign(bone)
+        # Assign all edit bones to a visible default Bone Collection.
+        bone_collections = armature.data.collections
+        default_collection_name = "Bones"
+        bone_collection = bone_collections.get(default_collection_name)
+        if bone_collection is None:
+            bone_collection = bone_collections.new(default_collection_name)
+        bone_collection.is_visible = True
+        for bone in armature.data.edit_bones:
+            bone_collection.assign(bone)
         
         for bone in armature.data.edit_bones:
             if bone.name in Bones.bone_list or bone.name.startswith(tuple(Bones.bone_list_with)):
