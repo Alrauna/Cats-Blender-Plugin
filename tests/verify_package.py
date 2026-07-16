@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import stat
 import tomllib
 import warnings
@@ -16,6 +17,18 @@ from pathlib import Path, PurePosixPath
 TARGET_BLENDER_VERSION = (5, 2, 0)
 FORBIDDEN_PARTS = {".git", ".github", "__pycache__"}
 FORBIDDEN_SUFFIXES = {".blend1", ".part", ".pyc", ".pyo", ".tmp"}
+FORBIDDEN_RELATIVE_FILES = {
+    "resources/dictionary_google.json",
+    "resources/ignore_version.txt",
+    "resources/settings.json",
+}
+REQUIRED_LICENSE_FILES = {
+    "LICENSE",
+    "extern_tools/google_trans_new/LICENSE",
+    "extern_tools/mmd_tools_local/LICENSE",
+    "extern_tools/mmd_tools_local/externals/opencc/LICENSE",
+    "extern_tools/mmd_tools_local/externals/opencc/NOTICE.txt",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +116,17 @@ def main() -> int:
         assert all(name.startswith(prefix) for name in file_names), (
             "Files exist outside the package wrapper directory"
         )
+        relative_file_names = {
+            name.removeprefix(prefix) for name in file_names
+        }
+        forbidden_files = relative_file_names & FORBIDDEN_RELATIVE_FILES
+        assert not forbidden_files, (
+            f"Mutable user state was included in the package: {sorted(forbidden_files)!r}"
+        )
+        missing_licenses = REQUIRED_LICENSE_FILES - relative_file_names
+        assert not missing_licenses, (
+            f"Package is missing required license/notice files: {sorted(missing_licenses)!r}"
+        )
         packaged_test_files = [
             name
             for name in file_names
@@ -127,10 +151,36 @@ def main() -> int:
         assert manifest.get("type") == "add-on"
         assert manifest.get("id") == "cats_blender_plugin"
         assert isinstance(manifest.get("version"), str) and manifest["version"]
+        assert manifest.get("license") == ["SPDX:GPL-3.0-or-later"]
+        permissions = manifest.get("permissions")
+        assert isinstance(permissions, dict)
+        assert set(permissions) == {"files", "network"}
+        assert all(
+            isinstance(description, str) and description.strip()
+            for description in permissions.values()
+        )
 
         minimum_version = version_tuple(manifest["blender_version_min"])
-        assert minimum_version <= TARGET_BLENDER_VERSION, (
-            f"Package requires Blender {minimum_version}, which excludes Blender 5.2"
+        assert minimum_version == TARGET_BLENDER_VERSION, (
+            f"Package targets Blender {minimum_version}, expected exactly Blender 5.2"
+        )
+
+        init_tree = ast.parse(
+            archive.read(init_name).decode("utf-8"), filename=init_name
+        )
+        cats_versions = [
+            node.value.value
+            for node in init_tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "CATS_VERSION"
+                for target in node.targets
+            )
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ]
+        assert cats_versions == [manifest["version"]], (
+            "CATS_VERSION in __init__.py does not match the extension manifest"
         )
 
         python_files = [name for name in file_names if name.endswith(".py")]

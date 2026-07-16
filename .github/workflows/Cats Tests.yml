@@ -2,9 +2,9 @@ name: Blender 5.2 validation
 
 on:
   push:
-    branches: [main, dev, forked_dev]
+    branches: [main, dev, forked_dev, blender-52]
   pull_request:
-    branches: [main, dev, forked_dev]
+    branches: [main, dev, forked_dev, blender-52]
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
@@ -107,6 +107,16 @@ jobs:
         run: >-
           $BLENDER_BIN --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/blender_52_api_smoke.py
+
+      - name: Import every installed Python module
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/import_sweep.py
+
+      - name: Stress extension registration lifecycle
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/lifecycle_stress.py
 
       - name: Run armature tests
         run: >-
