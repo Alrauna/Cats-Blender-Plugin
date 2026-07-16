@@ -391,6 +391,9 @@ class CheckAddonUpdate(bpy.types.Operator):
     bl_label = "Check Update"
     bl_description = "Check Add-on Update"
     bl_options = {"INTERNAL"}
+    # MMD Tools is bundled inside CATS and must never replace itself
+    # independently of the containing Blender extension.
+    _cats_skip_registration = True
 
     def execute(self, context):
         updater = AddonUpdaterManager.get_instance()
@@ -404,6 +407,7 @@ class UpdateAddon(bpy.types.Operator):
     bl_label = "Update"
     bl_description = "Update Add-on"
     bl_options = {"INTERNAL"}
+    _cats_skip_registration = True
 
     branch_name: bpy.props.StringProperty(
         name="Branch Name",

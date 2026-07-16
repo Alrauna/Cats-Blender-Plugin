@@ -210,6 +210,13 @@ def unregister():
         _unregister_step('settings timer', tools.settings.stop_apply_settings_threads, errors)
         _settings_timer_started = False
 
+    _unregister_step('one-shot timers', tools.common.cancel_pending_timers, errors)
+    _unregister_step(
+        'translation reload timers',
+        tools.translations.cancel_pending_timers,
+        errors,
+    )
+
     if _shape_key_menu_registered:
         _unregister_step(
             'shape-key menu',

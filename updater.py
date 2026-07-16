@@ -61,11 +61,15 @@ downloads_dir = _user_storage_dir(os.path.join("updater", "downloads"))
 ignore_ver_file = os.path.join(updater_state_dir, "ignore_version.txt")
 no_auto_ver_check_file = os.path.join(updater_state_dir, "no_auto_ver_check.txt")
 
-# Keep release endpoints in one place so a maintained fork only needs to change
-# this repository slug. Do not fall back to the archived Disroot updater.
-UPDATE_REPOSITORY = "teamneoneko/Cats-Blender-Plugin-Unofficial-"
-UPDATE_API_URL = f"https://api.github.com/repos/{UPDATE_REPOSITORY}/releases"
-UPDATE_DEV_BRANCH = "blender-5x-dev"
+# Automatic updates must point to this maintained fork, never to the archived
+# upstream project. Leave these empty until the fork has a release repository.
+UPDATE_REPOSITORY = ""
+UPDATE_API_URL = ""
+UPDATE_DEV_BRANCH = ""
+UPDATE_SOURCE_ERROR = (
+    "Automatic updates are disabled for this fork until its release repository "
+    "is configured"
+)
 NETWORK_TIMEOUT_SECONDS = 30
 _update_result_queue = Queue()
 _update_check_generation = 0
@@ -74,6 +78,13 @@ EXTENSION_PACKAGE_ID = "cats_blender_plugin"
 
 def _online_access_allowed():
     return bool(getattr(bpy.app, 'online_access', True))
+
+
+def _update_source_configured(repo=UPDATE_REPOSITORY):
+    return bool(
+        isinstance(repo, str)
+        and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)
+    )
 
 
 def _version_tuple(version):
@@ -168,6 +179,8 @@ def _validate_update_archive(archive_path):
     try:
         with zipfile.ZipFile(archive_path, 'r') as archive:
             for info in archive.infolist():
+                if '\\' in info.filename:
+                    return 'The update ZIP contains an unsafe path'
                 path = pathlib.PurePosixPath(info.filename)
                 if path.is_absolute() or '..' in path.parts:
                     return 'The update ZIP contains an unsafe path'
@@ -185,10 +198,17 @@ def _validate_update_archive(archive_path):
 
     if manifest.get('id') != EXTENSION_PACKAGE_ID:
         return 'The update ZIP belongs to a different Blender extension'
-    if not manifest.get('version'):
+    if manifest.get('schema_version') != '1.0.0' or manifest.get('type') != 'add-on':
+        return 'The update ZIP does not contain a supported add-on manifest'
+    package_version = _version_tuple(manifest.get('version'))
+    if not package_version:
         return 'The update ZIP does not declare a version'
+    if package_version[:2] != _version_tuple(CATS_VERSION)[:2]:
+        return 'The update ZIP targets a different Cats/Blender release series'
     minimum_version = _version_tuple(manifest.get('blender_version_min'))
-    if minimum_version and minimum_version > tuple(bpy.app.version):
+    if not minimum_version:
+        return 'The update ZIP does not declare a minimum Blender version'
+    if minimum_version > tuple(bpy.app.version):
         return 'The update ZIP requires a newer Blender version'
     return ''
 
@@ -210,6 +230,11 @@ class CheckForUpdateButton(bpy.types.Operator):
         used_updater_panel = True
         if not _online_access_allowed():
             show_error = "Online access is disabled in Blender's preferences"
+            self.report({'ERROR'}, show_error)
+            ui_refresh()
+            return {'CANCELLED'}
+        if not _update_source_configured():
+            show_error = UPDATE_SOURCE_ERROR
             self.report({'ERROR'}, show_error)
             ui_refresh()
             return {'CANCELLED'}
@@ -529,6 +554,12 @@ def check_for_update_background(check_on_startup=False):
 
     checked_on_startup = True
 
+    if not _update_source_configured():
+        if not check_on_startup:
+            show_error = UPDATE_SOURCE_ERROR
+            ui_refresh()
+        return
+
     if check_on_startup and os.path.isfile(no_auto_ver_check_file):
         print('AUTO CHECK DISABLED VIA FILE')
         return
@@ -623,10 +654,13 @@ def get_github_releases(repo, blender_series=None, check_generation=None):
     if blender_series is None and not _online_access_allowed():
         return False
 
-    repository = repo if '/' in repo else f"teamneoneko/{repo}"
+    if not _update_source_configured(repo):
+        return False
+
+    repository = repo
     api_url = (
         UPDATE_API_URL
-        if repository == UPDATE_REPOSITORY
+        if repository == UPDATE_REPOSITORY and UPDATE_API_URL
         else f"https://api.github.com/repos/{repository}/releases"
     )
     request = urllib.request.Request(
@@ -759,8 +793,15 @@ def update_now(version=None, latest=False, dev=False):
         finish_update(error="Online access is disabled in Blender's preferences")
         return
 
+    if not _update_source_configured():
+        finish_update(error=UPDATE_SOURCE_ERROR)
+        return
+
     if dev:
         print('UPDATE TO DEVELOPMENT')
+        if not UPDATE_DEV_BRANCH:
+            finish_update(error="No development update branch is configured")
+            return
         update_link = (
             f"https://github.com/{UPDATE_REPOSITORY}/archive/refs/heads/"
             f"{UPDATE_DEV_BRANCH}.zip"

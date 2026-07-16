@@ -34,3 +34,11 @@ python tests/verify_package.py Cats-Blender-Plugin-5.2.0.zip --source-dir .
 On Windows, replace `blender` with the full path to `blender.exe` if Blender is
 not available on the command line. The build rules intentionally exclude test
 code, repository metadata, caches, and user-specific mutable state.
+
+## Updates
+
+Automatic updates are intentionally disabled until this personal fork has its
+own release repository. This prevents the archived upstream project from
+overwriting the Blender 5.2 build. A maintainer can re-enable updates by setting
+the fork-owned `UPDATE_REPOSITORY`, `UPDATE_API_URL`, and `UPDATE_DEV_BRANCH`
+constants in `updater.py`.

@@ -221,6 +221,40 @@ class Blender52ApiTests(unittest.TestCase):
         finally:
             bpy.data.armatures.remove(armature)
 
+    def test_mmd_color_data_uses_current_mesh_attributes(self):
+        mesh = bpy.data.meshes.new("CATS MMD Color Attribute API Smoke")
+        try:
+            mesh.from_pydata(
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+                [],
+                [(0, 1, 2)],
+            )
+            attribute = mesh.color_attributes.new(
+                name="Color", type="BYTE_COLOR", domain="CORNER"
+            )
+            attribute.data.foreach_set(
+                "color",
+                (
+                    1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0,
+                ),
+            )
+            self.assertEqual("BYTE_COLOR", attribute.data_type)
+            self.assertEqual("CORNER", attribute.domain)
+            self.assertEqual(len(mesh.loops), len(attribute.data))
+        finally:
+            bpy.data.meshes.remove(mesh)
+
     def test_mutable_state_is_outside_the_installed_extension(self):
         install_root = Path(self.cats.__file__).resolve().parent
         settings = importlib.import_module(self.module_name + ".tools.settings")
@@ -257,6 +291,42 @@ class Blender52ApiTests(unittest.TestCase):
             bpy.ops.cats_updater.check_for_update()
         with self.assertRaisesRegex(RuntimeError, "Online access is disabled"):
             bpy.ops.cats_translations.download_latest()
+
+    def test_updater_cannot_use_the_archived_upstream_repository(self):
+        updater = importlib.import_module(self.module_name + ".updater")
+        self.assertEqual("", updater.UPDATE_REPOSITORY)
+        self.assertFalse(updater._update_source_configured())
+        with self.assertRaises(KeyError):
+            bpy.ops.mmd_tools_local.check_addon_update.get_rna_type()
+        with self.assertRaises(KeyError):
+            bpy.ops.mmd_tools_local.update_addon.get_rna_type()
+
+        original_online_access = updater._online_access_allowed
+        original_urlopen = updater.urllib.request.urlopen
+        original_checked_on_startup = updater.checked_on_startup
+        original_show_error = updater.show_error
+        try:
+            updater._online_access_allowed = lambda: True
+            updater.urllib.request.urlopen = lambda *_args, **_kwargs: self.fail(
+                "Updater attempted network access without a configured fork repository"
+            )
+            self.assertFalse(
+                updater.get_github_releases("", blender_series=(5, 2))
+            )
+
+            updater.checked_on_startup = False
+            updater.show_error = ""
+            updater.check_for_update_background(check_on_startup=True)
+            self.assertTrue(updater.checked_on_startup)
+            self.assertFalse(updater.is_checking_for_update)
+            self.assertFalse(
+                bpy.app.timers.is_registered(updater._consume_update_check_result)
+            )
+        finally:
+            updater._online_access_allowed = original_online_access
+            updater.urllib.request.urlopen = original_urlopen
+            updater.checked_on_startup = original_checked_on_startup
+            updater.show_error = original_show_error
 
     def test_registration_round_trip_has_no_rna_residue(self):
         self.cats.unregister()
@@ -317,6 +387,31 @@ class Blender52ApiTests(unittest.TestCase):
             self.assertNotIn("tests/not-shipped.py", names)
             self.assertNotIn("outside.txt", names)
             self.assertEqual("", updater._validate_update_archive(normalized_path))
+
+            wrong_series_path = Path(directory) / "wrong-series.zip"
+            with zipfile.ZipFile(
+                wrong_series_path, "w", compression=zipfile.ZIP_DEFLATED
+            ) as wrong_series:
+                wrong_series.writestr(
+                    "blender_manifest.toml",
+                    manifest.replace('version = "5.2.0"', 'version = "5.3.0"'),
+                )
+                wrong_series.writestr("__init__.py", "")
+            self.assertIn(
+                "different Cats/Blender release series",
+                updater._validate_update_archive(wrong_series_path),
+            )
+
+            unsafe_path = Path(directory) / "unsafe-path.zip"
+            with zipfile.ZipFile(
+                unsafe_path, "w", compression=zipfile.ZIP_DEFLATED
+            ) as unsafe:
+                unsafe.writestr("blender_manifest.toml", manifest)
+                unsafe.writestr("__init__.py", "")
+                unsafe.writestr("..\\outside.py", "")
+            self.assertIn(
+                "unsafe path", updater._validate_update_archive(unsafe_path)
+            )
 
 
 def main() -> int:

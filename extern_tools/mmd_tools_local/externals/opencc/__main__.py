@@ -4,7 +4,7 @@
 import argparse
 import sys
 
-from opencc import OpenCC
+from .opencc import OpenCC
 
 
 def main():

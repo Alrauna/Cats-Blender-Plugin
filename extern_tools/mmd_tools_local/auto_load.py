@@ -129,7 +129,9 @@ def iter_my_deps_from_parent_id(cls, my_classes_by_idname):
 def iter_my_classes(modules):
     base_types = get_register_base_types()
     for cls in get_classes_in_modules(modules):
-        if getattr(cls, "_cats_embedded_preferences", False):
+        if getattr(cls, "_cats_embedded_preferences", False) or getattr(
+            cls, "_cats_skip_registration", False
+        ):
             continue
         if any(base in base_types for base in cls.__bases__):
             if not getattr(cls, "is_registered", False):

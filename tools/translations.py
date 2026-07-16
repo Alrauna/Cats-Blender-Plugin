@@ -37,6 +37,32 @@ verbose = True
 last_loaded_language = None
 dictionary_download_link = "https://raw.githubusercontent.com/teamneoneko/Cats-Blender-Plugin-Unofficial-translations/5x-translations/dictionary.json"
 _addon_startup_time = None
+_pending_one_shot_timers = set()
+
+
+def _register_one_shot_timer(callback, first_interval=0.0):
+    """Register a callback that can still be cancelled when CATS unloads."""
+    def tracked_callback():
+        try:
+            result = callback()
+        except Exception:
+            _pending_one_shot_timers.discard(tracked_callback)
+            raise
+        if result is None:
+            _pending_one_shot_timers.discard(tracked_callback)
+        return result
+
+    _pending_one_shot_timers.add(tracked_callback)
+    bpy.app.timers.register(tracked_callback, first_interval=first_interval)
+    return tracked_callback
+
+
+def cancel_pending_timers():
+    """Cancel delayed translation reloads that have not run yet."""
+    for callback in tuple(_pending_one_shot_timers):
+        if bpy.app.timers.is_registered(callback):
+            bpy.app.timers.unregister(callback)
+    _pending_one_shot_timers.clear()
 
 
 def _translation_directories():
@@ -197,7 +223,7 @@ def update_ui(self, context):
             return None
 
         # Delay by 2 seconds to ensure all dialogs are closed and operations complete (Or we get crashes due to gotchaes situation)
-        bpy.app.timers.register(delayed_reload, first_interval=2.0)
+        _register_one_shot_timer(delayed_reload, first_interval=2.0)
     else:
         print("Language unchanged, no reload needed")
 

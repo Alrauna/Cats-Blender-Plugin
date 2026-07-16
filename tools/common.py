@@ -38,6 +38,35 @@ from sys import intern
 
 from ..extern_tools.mmd_tools_local import utils
 
+_pending_one_shot_timers = set()
+
+
+def _register_one_shot_timer(callback, first_interval=0.0):
+    """Register a callback that can still be cancelled when CATS unloads."""
+    def tracked_callback():
+        try:
+            result = callback()
+        except Exception:
+            _pending_one_shot_timers.discard(tracked_callback)
+            raise
+        if result is None:
+            _pending_one_shot_timers.discard(tracked_callback)
+        return result
+
+    _pending_one_shot_timers.add(tracked_callback)
+    bpy.app.timers.register(tracked_callback, first_interval=first_interval)
+    return tracked_callback
+
+
+def cancel_pending_timers():
+    """Cancel delayed callbacks that have not run before the add-on unloads."""
+    for callback in tuple(_pending_one_shot_timers):
+        if bpy.app.timers.is_registered(callback):
+            bpy.app.timers.unregister(callback)
+    _pending_one_shot_timers.clear()
+    _enum_choice_fix_scheduled.clear()
+
+
 def get_objects():
     return bpy.context.view_layer.objects
 
@@ -533,7 +562,7 @@ def validate_armature_selection():
                     except:
                         pass
                     return None  # Don't repeat
-                bpy.app.timers.register(fix_armature_selection)
+                _register_one_shot_timer(fix_armature_selection)
     except:
         pass
 
@@ -2384,7 +2413,7 @@ def _schedule_enum_fix(property_holder, scene, property_name, property_path, new
         scheduled_property_set.discard(property_path)
         return None  # Return None to not repeat the timer
 
-    bpy.app.timers.register(fix_enum_task, first_interval=0.0)
+    _register_one_shot_timer(fix_enum_task, first_interval=0.0)
 
 
 def is_enum_empty(string):

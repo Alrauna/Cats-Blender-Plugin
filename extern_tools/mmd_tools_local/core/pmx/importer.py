@@ -618,8 +618,11 @@ class PMXImporter:
 
         # Import ADD UV2 as vertex colors
         if self.__import_adduv2_as_vertex_colors and pmxModel.header and pmxModel.header.additional_uvs >= 2:
-            # Create vertex color layer
-            vertex_colors = mesh.vertex_colors.new(name="Color")
+            # Match the former vertex-color layer representation using the
+            # current Blender color-attribute API.
+            color_attribute = mesh.color_attributes.new(
+                name="Color", type="BYTE_COLOR", domain="CORNER"
+            )
             color_data = []
             for loop_index in loop_indices_orig:
                 vertex = pmxModel.vertices[loop_index]
@@ -629,7 +632,7 @@ class PMXImporter:
                     color_data.extend([uv2_data[0], uv2_data[1], uv2_data[2], uv2_data[3]])
                 else:
                     color_data.extend([1.0, 1.0, 1.0, 1.0])
-            vertex_colors.data.foreach_set("color", color_data)
+            color_attribute.data.foreach_set("color", color_data)
             logging.info("Imported ADD UV2 as vertex colors")
 
         if pmxModel.header and pmxModel.header.additional_uvs:

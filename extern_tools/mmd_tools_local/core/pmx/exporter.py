@@ -1163,16 +1163,36 @@ class __PmxExporter:
                 ),
             ]
 
-        # Extract vertex colors as ADD UV2
-        # TODO: Replace base_mesh.vertex_colors with base_mesh.color_attributes
-        vertex_colors = None
-        vertex_colors_data = None
+        # Extract Blender color attributes as ADD UV2. The legacy
+        # Mesh.vertex_colors API is deprecated; color attributes can be stored
+        # per face corner (the old behavior) or per mesh point.
+        color_attribute = None
+        color_attribute_data = None
         if self.__export_vertex_colors_as_adduv2:
-            vertex_colors = base_mesh.vertex_colors.active
-            if vertex_colors is None and len(base_mesh.vertex_colors) > 0:
-                vertex_colors = base_mesh.vertex_colors[0]
-            if vertex_colors:
-                vertex_colors_data = [c.color for c in vertex_colors.data]
+            color_attributes = base_mesh.color_attributes
+            active_color = color_attributes.active_color
+            if active_color and active_color.domain in {"CORNER", "POINT"}:
+                color_attribute = active_color
+            else:
+                color_attribute = next(
+                    (
+                        attribute
+                        for attribute in color_attributes
+                        if attribute.domain in {"CORNER", "POINT"}
+                    ),
+                    None,
+                )
+
+            if color_attribute:
+                if color_attribute.domain == "CORNER":
+                    color_attribute_data = [
+                        item.color for item in color_attribute.data
+                    ]
+                else:
+                    color_attribute_data = [
+                        color_attribute.data[loop.vertex_index].color
+                        for loop in base_mesh.loops
+                    ]
 
                 if "UV1" not in base_mesh.uv_layers:
                     uv1_layer = base_mesh.uv_layers.new(name="UV1")
@@ -1187,7 +1207,7 @@ class __PmxExporter:
                 uv2_layer = base_mesh.uv_layers["UV2"]
                 uv2_zw_layer = base_mesh.uv_layers["_UV2"]
 
-                for loop_idx, color in enumerate(vertex_colors_data):
+                for loop_idx, color in enumerate(color_attribute_data):
                     if loop_idx < len(uv2_layer.data):
                         # Pre-flip V coordinates to compensate for flipUV_V processing
                         uv2_layer.data[loop_idx].uv = (color[0], 1.0 - color[1])
