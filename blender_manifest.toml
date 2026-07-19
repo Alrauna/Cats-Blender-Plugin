@@ -2,12 +2,12 @@ schema_version = "1.0.0"
 
 # Unofficial CATS Blender Plugin extension
 id = "cats_blender_plugin"
-version = "5.2.0"
+version = "5.2.0-alpha.1"
 name = "Unofficial CATS Blender Plugin"
 tagline = "Import and optimize avatar models for VRChat"
-maintainer = "Unofficial CATS Team <hello@yusarina.xyz>"
+maintainer = "Alrauna <67886220+Alrauna@users.noreply.github.com>"
 type = "add-on"
-website = "https://github.com/teamneoneko/Cats-Blender-Plugin-Unofficial-"
+website = "https://github.com/Alrauna/Cats-Blender-Plugin"
 tags = ["3D View", "Modeling", "Mesh", "Object"]
 blender_version_min = "5.2.0"
 license = [
@@ -22,15 +22,45 @@ network = "Check for updates and use online translation services"
 paths_exclude_pattern = [
   "__pycache__/",
   "*.py[cod]",
+  "*.blend",
+  "*.blend1",
   "/.git/",
   "/.github/",
   "/.gitignore",
   "/.gitmodules",
   "/.agents/",
   "/.codex/",
+  "/.idea/",
+  "/.vscode/",
+  "/.cache/",
+  "/.coverage",
+  "/.local-references/",
+  "/.packaged-releases/",
+  "/.test-runtime/",
+  "/AGENTS.md",
   "/tests/",
   "/*.zip",
+  "/cats blender plugin_updater/",
+  "/cats_updater/",
+  "/tmp/",
+  "/CATS Bake/",
+  "/mmd_tools_local2/",
+  "/README.md",
+  "/README",
+  "/readme.md",
+  "/readme",
+  "/readme.txt",
+  "/README.text",
+  "/crashlog.txt",
+  "/ssh.txt",
+  "/ssh.txt.pub",
+  "/resources/downloads/",
   "/resources/dictionary_google.json",
+  "/resources/google-response.txt",
+  "/resources/google-response-readable.txt",
   "/resources/ignore_version.txt",
+  "/resources/no_auto_ver_check.txt",
   "/resources/settings.json",
+  "/resources/icons/supporters/",
+  "/resources/supporters.json",
 ]

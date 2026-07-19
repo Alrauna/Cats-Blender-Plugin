@@ -1,6 +1,6 @@
 # MIT License
 
-CATS_VERSION = "5.2.0"
+CATS_VERSION = "5.2.0-alpha.1"
 MIN_BLENDER_VERSION = (5, 2, 0)
 dev_branch = False
 
@@ -89,23 +89,13 @@ def check_unsupported_blender_versions():
         )
 
 def set_cats_version_string():
-    version_parts = CATS_VERSION.split(".")
+    if not dev_branch:
+        return CATS_VERSION
 
-    # Convert version parts to integers
-    version_parts = [int(part) for part in version_parts]
-
-    # Increment the last version component if in dev branch
-    if dev_branch:
-        version_parts[-1] += 1
-
-    # Convert version back to string
-    version_str = ".".join(str(part) for part in version_parts)
-
-    # Add -dev if in dev version
-    if dev_branch:
-        version_str += "-dev"
-
-    return version_str
+    release_version = CATS_VERSION.partition("-")[0]
+    version_parts = [int(part) for part in release_version.split(".")]
+    version_parts[-1] += 1
+    return ".".join(str(part) for part in version_parts) + "-dev"
 
 def register():
     global _updater_registered

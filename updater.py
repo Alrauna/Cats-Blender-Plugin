@@ -1167,11 +1167,7 @@ def register(dev_branch, version_str):
     current_version_str = version_str
 
     # Get current version
-    current_version = []
-    version_parts = CATS_VERSION.split(".")
-
-    for part in version_parts:
-        current_version.append(int(part))
+    current_version = list(_version_tuple(CATS_VERSION)[:3])
 
     bpy.types.Scene.cats_updater_version_list = bpy.props.EnumProperty(
         name=t('bpy.types.Scene.cats_updater_version_list.label'),
