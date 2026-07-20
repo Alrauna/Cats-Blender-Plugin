@@ -51,6 +51,13 @@ Unless explicitly instructed:
   `.local-references/`.
 - Do not treat external archives, extracted upstream copies, downloaded
   fixtures, notes, or comparison artifacts as source of truth.
+- The sole standing exception is
+  `.local-references/Cats-Blender-Plugin-Unofficial5.0.3.1.zip`. Treat that
+  exact, ignored archive as the read-only Blender 5.0.3.1 behavioral reference
+  for old-version runtime comparisons. Prefer it over rebuilding `blender-50`
+  for Blender 5.0 tests. Validate the ZIP before use, install it only into a
+  separate isolated Blender 5.0 profile, and never modify, replace, repackage,
+  commit, publish, or copy it into the source tree.
 - Do not treat ZIPs in `.packaged-releases/` as newer than the checked-out Git
   commit.
 - Do not modify or replace a retained reference archive.
