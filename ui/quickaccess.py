@@ -124,7 +124,7 @@ class QuickAccessPanel(ToolPanel, bpy.types.Panel):
             row.scale_y = 1.3
             split = row.split(factor=0.72, align=True)
             split.operator(Armature_manual.StartPoseMode.bl_idname, icon='POSE_HLT')
-            reset_options = split.row(align=True)
+            reset_options = split.split(factor=0.5, align=True)
             reset_options.operator(
                 Armature_manual.StartPoseModeNoShapeKeyReset.bl_idname,
                 text="",
@@ -136,7 +136,7 @@ class QuickAccessPanel(ToolPanel, bpy.types.Panel):
             row.scale_y = 1.3
             split = row.split(factor=0.72, align=True)
             split.operator(Armature_manual.StopPoseMode.bl_idname, icon=globs.ICON_POSE_MODE)
-            reset_options = split.row(align=True)
+            reset_options = split.split(factor=0.5, align=True)
             reset_options.operator(
                 Armature_manual.StopPoseModeNoShapeKeyReset.bl_idname,
                 text="",

@@ -296,12 +296,14 @@ class PoseModeSmokeTests(unittest.TestCase):
         class RecordingLayout:
             def __init__(self):
                 self.operator_ids = []
+                self.split_factors = []
                 self.scale_y = 1.0
 
             def row(self, **_kwargs):
                 return self
 
-            def split(self, **_kwargs):
+            def split(self, **kwargs):
+                self.split_factors.append(kwargs.get("factor"))
                 return self
 
             def column(self, **_kwargs):
@@ -327,6 +329,7 @@ class PoseModeSmokeTests(unittest.TestCase):
             ],
             start_layout.operator_ids[:3],
         )
+        self.assertEqual([0.72, 0.5], start_layout.split_factors)
 
         bpy.ops.object.mode_set(mode="POSE")
         stop_layout = RecordingLayout()
@@ -341,6 +344,7 @@ class PoseModeSmokeTests(unittest.TestCase):
             ],
             stop_layout.operator_ids[:3],
         )
+        self.assertEqual([0.72, 0.5], stop_layout.split_factors)
 
         for idname in (
             "start_pose_mode_no_shapekey_reset",
