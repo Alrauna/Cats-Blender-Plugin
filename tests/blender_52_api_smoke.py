@@ -389,12 +389,16 @@ class Blender52ApiTests(unittest.TestCase):
             self.assertEqual("", updater._validate_update_archive(normalized_path))
 
             wrong_series_path = Path(directory) / "wrong-series.zip"
+            current_version_line = f'version = "{self.cats.CATS_VERSION}"'
+            self.assertIn(current_version_line, manifest)
             with zipfile.ZipFile(
                 wrong_series_path, "w", compression=zipfile.ZIP_DEFLATED
             ) as wrong_series:
                 wrong_series.writestr(
                     "blender_manifest.toml",
-                    manifest.replace('version = "5.2.0"', 'version = "5.3.0"'),
+                    manifest.replace(
+                        current_version_line, 'version = "5.3.0"', 1
+                    ),
                 )
                 wrong_series.writestr("__init__.py", "")
             self.assertIn(
