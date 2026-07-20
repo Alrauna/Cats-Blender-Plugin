@@ -122,15 +122,27 @@ class QuickAccessPanel(ToolPanel, bpy.types.Panel):
         if not armature_obj or armature_obj.mode != 'POSE':
             row = col.row(align=True)
             row.scale_y = 1.3
-            split = row.split(factor=0.85, align=True)
+            split = row.split(factor=0.72, align=True)
             split.operator(Armature_manual.StartPoseMode.bl_idname, icon='POSE_HLT')
-            split.operator(Armature_manual.StartPoseModeNoReset.bl_idname, text="", icon='POSE_HLT')
+            reset_options = split.row(align=True)
+            reset_options.operator(
+                Armature_manual.StartPoseModeNoShapeKeyReset.bl_idname,
+                text="",
+                icon='SHAPEKEY_DATA',
+            )
+            reset_options.operator(Armature_manual.StartPoseModeNoReset.bl_idname, text="", icon='POSE_HLT')
         else:
             row = col.row(align=True)
             row.scale_y = 1.3
-            split = row.split(factor=0.85, align=True)
+            split = row.split(factor=0.72, align=True)
             split.operator(Armature_manual.StopPoseMode.bl_idname, icon=globs.ICON_POSE_MODE)
-            split.operator(Armature_manual.StopPoseModeNoReset.bl_idname, text="", icon=globs.ICON_POSE_MODE)
+            reset_options = split.row(align=True)
+            reset_options.operator(
+                Armature_manual.StopPoseModeNoShapeKeyReset.bl_idname,
+                text="",
+                icon='SHAPEKEY_DATA',
+            )
+            reset_options.operator(Armature_manual.StopPoseModeNoReset.bl_idname, text="", icon=globs.ICON_POSE_MODE)
 
             if armature_obj and armature_obj.mode == 'POSE':
                 col.separator()

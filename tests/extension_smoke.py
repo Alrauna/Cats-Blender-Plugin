@@ -17,6 +17,8 @@ EXPECTED_OPERATORS = (
     ("cats_armature", "fix"),
     ("cats_importer", "import_any_model"),
     ("cats_material", "combine_mats"),
+    ("cats_manual", "start_pose_mode_no_shapekey_reset"),
+    ("cats_manual", "stop_pose_mode_no_shapekey_reset"),
     ("cats_shapekey", "shape_key_to_basis"),
     ("mmd_tools_local", "apply_additional_transform"),
     ("mmd_tools_local", "clean_additional_transform"),

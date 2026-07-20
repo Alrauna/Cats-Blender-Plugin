@@ -108,6 +108,11 @@ jobs:
           $BLENDER_BIN --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/blender_52_api_smoke.py
 
+      - name: Exercise Pose Mode reset controls
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/pose_mode_smoke.py
+
       - name: Import every installed Python module
         run: >-
           $BLENDER_BIN --background --offline-mode -noaudio

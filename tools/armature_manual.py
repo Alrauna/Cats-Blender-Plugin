@@ -131,6 +131,24 @@ class StartPoseMode(bpy.types.Operator):
 
 
 @register_wrap
+class StartPoseModeNoShapeKeyReset(bpy.types.Operator):
+    bl_idname = 'cats_manual.start_pose_mode_no_shapekey_reset'
+    bl_label = t('StartPoseMode.label')
+    bl_description = t('StartPoseModeNoShapeKeyReset.desc')
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        if Common.get_armature() is None:
+            return False
+        return True
+
+    def execute(self, context):
+        start_pose_mode(reset_pose=True, reset_shapekeys=False)
+        return {'FINISHED'}
+
+
+@register_wrap
 class StartPoseModeNoReset(bpy.types.Operator):
     bl_idname = 'cats_manual.start_pose_mode_no_reset'
     bl_label = t('StartPoseMode.label')
@@ -148,7 +166,12 @@ class StartPoseModeNoReset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def start_pose_mode(reset_pose=True):
+def start_pose_mode(reset_pose=True, reset_shapekeys=None):
+    # Preserve the historical one-argument behavior for internal or external
+    # callers while allowing the UI to reset only the armature pose.
+    if reset_shapekeys is None:
+        reset_shapekeys = reset_pose
+
     saved_data = Common.SavedData()
 
     current = ""
@@ -162,7 +185,7 @@ def start_pose_mode(reset_pose=True):
     Common.switch('POSE')
     armature.data.pose_position = 'POSE'
 
-    if reset_pose:
+    if reset_shapekeys:
         for mesh in Common.get_meshes_objects():
             if Common.has_shapekeys(mesh):
                 for shape_key in mesh.data.shape_keys.key_blocks:
@@ -210,6 +233,24 @@ class StopPoseMode(bpy.types.Operator):
 
 
 @register_wrap
+class StopPoseModeNoShapeKeyReset(bpy.types.Operator):
+    bl_idname = 'cats_manual.stop_pose_mode_no_shapekey_reset'
+    bl_label = t('StopPoseMode.label')
+    bl_description = t('StopPoseModeNoShapeKeyReset.desc')
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        if Common.get_armature() is None:
+            return False
+        return True
+
+    def execute(self, context):
+        stop_pose_mode(reset_pose=True, reset_shapekeys=False)
+        return {'FINISHED'}
+
+
+@register_wrap
 class StopPoseModeNoReset(bpy.types.Operator):
     bl_idname = 'cats_manual.stop_pose_mode_no_reset'
     bl_label = t('StopPoseMode.label')
@@ -227,13 +268,19 @@ class StopPoseModeNoReset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def stop_pose_mode(reset_pose=True):
+def stop_pose_mode(reset_pose=True, reset_shapekeys=None):
+    # Preserve the historical one-argument behavior for internal or external
+    # callers while allowing the UI to reset only the armature pose.
+    if reset_shapekeys is None:
+        reset_shapekeys = reset_pose
+
     saved_data = Common.SavedData()
     armature = Common.get_armature()
     Common.set_active(armature)
 
     # Make all objects visible
-    bpy.ops.object.hide_view_clear()
+    for obj in Common.get_objects():
+        Common.hide(obj, False)
 
     for pb in armature.pose.bones:
         pb.hide = False
@@ -251,7 +298,7 @@ def stop_pose_mode(reset_pose=True):
     Common.remove_rigidbodies_global()
     # armature.data.pose_position = 'REST'
 
-    if reset_pose:
+    if reset_shapekeys:
         for mesh in Common.get_meshes_objects():
             if Common.has_shapekeys(mesh):
                 for shape_key in mesh.data.shape_keys.key_blocks:

@@ -145,6 +145,12 @@ class LifecycleStressTests(unittest.TestCase):
 
         self.assertIsNotNone(operator_rna("cats_armature", "fix"))
         self.assertIsNotNone(
+            operator_rna("cats_manual", "start_pose_mode_no_shapekey_reset")
+        )
+        self.assertIsNotNone(
+            operator_rna("cats_manual", "stop_pose_mode_no_shapekey_reset")
+        )
+        self.assertIsNotNone(
             operator_rna("mmd_tools_local", "apply_additional_transform")
         )
         self.assertTrue(getattr(register, "__bl_registered_classes"))
@@ -229,6 +235,12 @@ class LifecycleStressTests(unittest.TestCase):
                     self.assertFalse(hasattr(owner, property_name))
 
         self.assertIsNone(operator_rna("cats_armature", "fix"))
+        self.assertIsNone(
+            operator_rna("cats_manual", "start_pose_mode_no_shapekey_reset")
+        )
+        self.assertIsNone(
+            operator_rna("cats_manual", "stop_pose_mode_no_shapekey_reset")
+        )
         self.assertIsNone(
             operator_rna("mmd_tools_local", "apply_additional_transform")
         )
