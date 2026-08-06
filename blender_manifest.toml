@@ -40,6 +40,7 @@ paths_exclude_pattern = [
   "/AGENTS.md",
   "/CLAUDE.md",
   "/docs/",
+  "/scripts/",
   "/tests/",
   "/*.zip",
   "/cats blender plugin_updater/",
