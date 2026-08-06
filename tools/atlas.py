@@ -141,7 +141,7 @@ class ShotariyaButton(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
-        webbrowser.open('https://github.com/teamneoneko/material-combiner-addon/releases/latest')
+        webbrowser.open('https://github.com/Alrauna/material-combiner-addon/releases/latest')
 
         self.report({'INFO'}, 'ShotariyaButton.success')
         return {'FINISHED'}
@@ -154,7 +154,7 @@ class ShotariyaButton(bpy.types.Operator):
         col = layout.column()
         col.label(text="This will open Material Combiner releases:", icon='INFO')
         col.separator()
-        col.label(text="https://github.com/teamneoneko/material-combiner-addon/")
+        col.label(text="https://github.com/Alrauna/material-combiner-addon/")
         col.label(text="releases/latest")
         col.separator() 
         col.label(text="Click OK to open, or Cancel to visit manually.")
