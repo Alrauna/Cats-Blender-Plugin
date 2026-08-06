@@ -800,7 +800,7 @@
         "CreditsPanel.maintainers2": "此前维护者：Team Neoneko（Yusarina）",
         "CreditsPanel.originalCreators": "由 Hotox 与 GiveMeAllYourCats 创建",
         "HelpButton.label": "需要帮助？",
-        "HelpButton.URL": "https://catsblenderplugin.xyz/wiki.html",
+        "HelpButton.URL": "https://github.com/teamneoneko/Cats-Blender-Plugin-Unofficial-/wiki",
         "HelpButton.success": "Wiki 已打开",
         "PatchnotesButton.label": "最新更新日志",
         "PatchnotesButton.URL": "https://github.com/Alrauna/Cats-Blender-Plugin/releases",

@@ -836,7 +836,7 @@
         "CreditsPanel.maintainers2": "이전 관리자: Team Neoneko (Yusarina)",
         "CreditsPanel.originalCreators": "Hotox 와 GiveMeAllYourCats 가 제작",
         "HelpButton.label": "도움이 필요하신가요?",
-        "HelpButton.URL": "https://catsblenderplugin.xyz/wiki.html",
+        "HelpButton.URL": "https://github.com/teamneoneko/Cats-Blender-Plugin-Unofficial-/wiki",
         "HelpButton.success": "위키가 열렸습니다",
         "PatchnotesButton.label": "최신 패치노트",
         "PatchnotesButton.URL": "https://github.com/Alrauna/Cats-Blender-Plugin/releases",

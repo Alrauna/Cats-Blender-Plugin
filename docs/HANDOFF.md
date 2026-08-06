@@ -32,10 +32,12 @@ removal with `--expect-absent`. The package that run exercised was
 `cats_blender_plugin-5.2.0-alpha.1-4e9e7b5.zip`, SHA-256
 `a303b101878522c2b82a633a880a2e5410b8493b578014190a6bc295c37f2c21`.
 
-`.packaged-releases/` is now kept empty. Packages are build output, not
-artifacts to retain; rebuild with `scripts/build.py` when one is needed. The
-SHA-256 above records what was validated and will not reproduce byte-for-byte,
-since ZIP member timestamps vary between builds.
+Leave builds in `.packaged-releases/` alone. They are the maintainer's to keep or
+discard, and are removed only when the maintainer asks. Do not delete a build
+after validating it.
+
+A recorded SHA-256 will not reproduce byte-for-byte on a rebuild, since ZIP
+member timestamps vary between builds.
 
 The three test-asset URLs in `tests/run.py` were confirmed live. Two of the
 three assets are gzip-compressed blend files, which `read_blender_file_magic`
@@ -80,9 +82,9 @@ from a tag before deletion. To recover one, branch from its tag.
   preview workflows. Background tests cannot substitute for these.
 - The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
   review. The maintainer name was left untranslated inside each sentence.
-- `HelpButton.URL` in all four translation files points at
-  `catsblenderplugin.xyz/wiki.html`, a Team Neoneko site. It still returns 200,
-  so it was left alone, but it is not this fork's to rely on.
+- The credits panel's Help button and three in-app wiki links point at the
+  archived upstream wiki, which is the only feature documentation that exists.
+  They stay until this fork has a wiki of its own.
 - `.gitmodules` points `extern_tools/imscale` at
   `https://github.com/Alrauna/immersive_scaler.git`, but no gitlink is registered
   for that path, so the submodule is still absent at runtime. Registering it is a

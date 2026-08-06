@@ -833,7 +833,7 @@
         "CreditsPanel.maintainers2": "以前のメンテナー: Team Neoneko (Yusarina)",
         "CreditsPanel.originalCreators": "Hotox と GiveMeAllYourCats によって作成",
         "HelpButton.label": "ヘルプが必要ですか？",
-        "HelpButton.URL": "https://catsblenderplugin.xyz/wiki.html",
+        "HelpButton.URL": "https://github.com/teamneoneko/Cats-Blender-Plugin-Unofficial-/wiki",
         "HelpButton.success": "Wikiが開かれました",
         "PatchnotesButton.label": "最新のパッチノート",
         "PatchnotesButton.URL": "https://github.com/Alrauna/Cats-Blender-Plugin/releases",
