@@ -22,6 +22,23 @@ FORBIDDEN_RELATIVE_FILES = {
     "resources/ignore_version.txt",
     "resources/settings.json",
 }
+# Repository-only entries that must never reach a user package. Matched against
+# the first path component, so a file and a directory of the same name are both
+# covered.
+FORBIDDEN_TOP_LEVEL = {
+    ".agents",
+    ".codex",
+    ".gitignore",
+    ".gitmodules",
+    ".local-references",
+    ".packaged-releases",
+    ".test-runtime",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs",
+    "scripts",
+    "tests",
+}
 REQUIRED_LICENSE_FILES = {
     "LICENSE",
     "extern_tools/google_trans_new/LICENSE",
@@ -127,13 +144,13 @@ def main() -> int:
         assert not missing_licenses, (
             f"Package is missing required license/notice files: {sorted(missing_licenses)!r}"
         )
-        packaged_test_files = [
+        repository_only_files = sorted(
             name
             for name in file_names
-            if PurePosixPath(name.removeprefix(prefix)).parts[0] == "tests"
-        ]
-        assert not packaged_test_files, (
-            f"CI-only tests were included in the user package: {packaged_test_files!r}"
+            if PurePosixPath(name.removeprefix(prefix)).parts[0] in FORBIDDEN_TOP_LEVEL
+        )
+        assert not repository_only_files, (
+            f"Repository-only material was included in the user package: {repository_only_files!r}"
         )
 
         manifest_name = prefix + "blender_manifest.toml"
