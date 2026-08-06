@@ -38,6 +38,7 @@ paths_exclude_pattern = [
   "/.packaged-releases/",
   "/.test-runtime/",
   "/AGENTS.md",
+  "/CLAUDE.md",
   "/tests/",
   "/*.zip",
   "/cats blender plugin_updater/",
