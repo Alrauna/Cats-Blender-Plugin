@@ -21,9 +21,14 @@ testing.
 Full CI-equivalent run at commit `7b2b93e`, in an isolated profile, all passing:
 source and package validation, `verify_package.py`, install/enable, the five
 background smoke suites, the 13 armature invocations, the shape-key suite, and
-removal with `--expect-absent`. The validated package is
-`.packaged-releases/cats_blender_plugin-5.2.0-alpha.1-7b2b93e.zip`, SHA-256
+removal with `--expect-absent`. The package that run exercised was
+`cats_blender_plugin-5.2.0-alpha.1-7b2b93e.zip`, SHA-256
 `a8088696ba0c68fd4c30af713217afc56a897316a6ca9346296046e8f51e5fac`.
+
+`.packaged-releases/` is now kept empty. Packages are build output, not
+artifacts to retain; rebuild with `scripts/build.py` when one is needed. The
+SHA-256 above records what was validated and will not reproduce byte-for-byte,
+since ZIP member timestamps vary between builds.
 
 The three test-asset URLs in `tests/run.py` were confirmed live. Two of the
 three assets are gzip-compressed blend files, which `read_blender_file_magic`
@@ -36,22 +41,19 @@ already handles.
   naming rule in `AGENTS.md`. Deferred by maintainer decision, not blocked.
 - No interactive coverage exists for import/export, file browser, or material
   preview workflows. Background tests cannot substitute for these.
-- `.packaged-releases/Cats-Blender-Plugin-5.2.0-795d323.zip` predates the
-  current naming convention and can be discarded whenever convenient.
 
 ## Packaging guardrails
 
-Build with `python scripts/build.py --blend <blender>`. It derives the package
-name from the manifest and the current commit, so a stale hash cannot reach a
-filename, and it refuses a dirty tracked tree. `tests/verify_package.py` fails
+Build with `python scripts/build.py --blend <blender>`. It names and places the
+package itself and refuses a dirty tracked tree. `tests/verify_package.py` fails
 the build if anything under `FORBIDDEN_TOP_LEVEL` reaches a package; a new
 repository-only directory must be added there and to `paths_exclude_pattern` in
 the same change.
 
 The CI workflow still builds with the raw `extension build` commands rather than
-`scripts/build.py`, because it packages into `RUNNER_TEMP` and does not need the
-`.packaged-releases/` naming convention. It calls `verify_package.py`, so the
-exclusion guardrail applies there too. This divergence is deliberate.
+`scripts/build.py`, because it packages into `RUNNER_TEMP`. It calls
+`verify_package.py`, so the exclusion guardrail applies there too. This
+divergence is deliberate.
 
 ## Local environment notes
 

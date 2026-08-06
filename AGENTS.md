@@ -214,19 +214,14 @@ Do not pass `.` to `compileall`. It descends into `.local-references/` and
 `.test-runtime/` and writes bytecode into the read-only reference tree. Name the
 source paths explicitly, as above.
 
-Build with `scripts/build.py` rather than by hand. It reads `id` and `version`
-from `blender_manifest.toml`, takes `short-hash` from `git rev-parse --short
-HEAD`, writes `.packaged-releases/<id>-<version>-<short-hash>.zip`, then
-validates the source, validates the package, and runs `tests/verify_package.py`.
-It refuses to build a dirty tracked tree, because the hash in the name would not
-describe the contents. Report all three source values and the final path after
-building.
+Build with `scripts/build.py` rather than by hand. It names and places the
+package itself, then validates the source, validates the package, and runs
+`tests/verify_package.py`. It refuses to build a dirty tracked tree. Report the
+final path after building.
 
 All Blender extension builds, including release candidates, validation builds,
 and test builds, must live in `.packaged-releases/`. Do not write build ZIPs to
-the repository root, `.test-runtime/`, or another source directory. Do not
-substitute the display name, manually normalize the manifest values, reuse a
-stale hash, or infer metadata from an older ZIP.
+the repository root, `.test-runtime/`, or another source directory.
 
 `tests/verify_package.py` enforces the exclusions: its `FORBIDDEN_TOP_LEVEL` set
 fails the build when repository-only material reaches a package. Add new
