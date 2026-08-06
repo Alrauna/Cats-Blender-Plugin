@@ -18,10 +18,12 @@ testing.
 
 ## Verified on 2026-08-06 (Blender 5.2.0 LTS, build 2026-07-14)
 
-Full CI-equivalent run at commit `2c6c626`, in an isolated profile, all passing:
+Full CI-equivalent run at commit `90a7717`, in an isolated profile, all passing:
 source and package validation, `verify_package.py`, install/enable, the five
 background smoke suites, the 13 armature invocations, the shape-key suite, and
-removal with `--expect-absent`.
+removal with `--expect-absent`. The validated package is
+`.packaged-releases/cats_blender_plugin-5.2.0-alpha.1-90a7717.zip`, SHA-256
+`b9c952c5e69580db7e53de8091a3db928aa0c03f2e0055fa5cbfd0962e297ab5`.
 
 The three test-asset URLs in `tests/run.py` were confirmed live. Two of the
 three assets are gzip-compressed blend files, which `read_blender_file_magic`
