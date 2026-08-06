@@ -1,6 +1,13 @@
 # Handoff
 
-Branch `blender-52`, version `5.2.0-alpha.1`.
+Branches `main` and `blender-52`, version `5.2.0-alpha.1`.
+
+## Action required from the maintainer
+
+**Set `main` as the default branch** in the GitHub repository settings. This
+cannot be done from the CLI without a token. `blender-52` is still the default,
+so until it is switched, visitors land on `blender-52` rather than `main`. The two
+branches are identical at the commit `main` was created from.
 
 ## State
 
@@ -34,31 +41,38 @@ The three test-asset URLs in `tests/run.py` were confirmed live. Two of the
 three assets are gzip-compressed blend files, which `read_blender_file_magic`
 already handles.
 
-## Repository rework
+## Repository rework — complete
 
-In flight. See `docs/superpowers/specs/repository-rework.md` and
-`docs/superpowers/plans/repository-rework.md`.
+The fork now presents as Alrauna's, not as a continuation of Team Neoneko's
+archived project.
 
-Phase 1 is complete: the README was rebuilt as a landing page crediting the
-previous maintainers, Material Combiner now points at
-`Alrauna/material-combiner-addon`, the credits panel names Alrauna, and the
-Support Us button was removed because `neoneko.xyz/support-us.html` returns 404
-and this fork has no website. Registered classes dropped 137 to 136 as a result.
+The README is a landing page that credits the lineage: Absolute Quantum with
+Hotox and GiveMeAllYourCats created Cats, Team Neoneko with Yusarina carried it
+to 5.0, and this work starts from their release. 989onan is credited as a
+contributor, not a Neoneko maintainer; only one upstream string claimed otherwise
+and the commit record contradicts it. The archived upstream wiki is labelled
+historical, and remains the only feature documentation that exists.
 
-**Phase 2 is blocked on two forks the maintainer must create:**
+Companion projects point at maintained forks: `Alrauna/material-combiner-addon`,
+`Alrauna/immersive_scaler`, and
+`Alrauna/Cats-Blender-Plugin-Unofficial-translations` for both the dictionary and
+the UI translation download. Patch notes point at this fork's releases rather
+than the archived project's. The Support Us button was removed; its only target
+returned 404 and this fork has no website. Registered classes are 136, down from
+137, for that reason alone.
 
-- `Alrauna/immersive_scaler` — then repoint `tools/scale.py:58`, the four
-  `ImmersiveScalerHelpButton.URL` entries, and the two README references.
-- `Alrauna/Cats-Blender-Plugin-Unofficial-translations`, **keeping the
-  `5x-translations` branch** — then repoint `tools/translations.py:38` and the
-  `repo_owner` at line 305. Verify the raw URL returns JSON first; a wrong branch
-  name fails silently at runtime.
+### Topology
 
-Phase 3 is the topology change: push `blender-52`, create `main`, set it default
-on GitHub, tag the nine untagged branch tips as `archive/<branch>`, delete
-fifteen remote branches, delete local `blender-50`, and remove the `upstream`
-remote. Keep `blender-45` and `blender-45-dev`; Blender 4.5 LTS is still
-supported. Keep all 117 tags.
+`main` and `blender-52` are identical. `blender-45` and `blender-45-dev` are kept
+because Blender 4.5 LTS is still supported. Fifteen branches for Blender 3.6
+through 5.0 were deleted, along with the local `blender-50` and the `upstream`
+remote that pointed at `git.disroot.org/Neoneko`.
+
+All 117 original tags are kept, plus nine `archive/<branch>` tags created for the
+branch tips no release tag reached: `Welcome`, `blender-36-dev`, `blender-40`,
+`blender-40-dev`, `blender-41`, `blender-41-dev`, `blender-42-dev`,
+`blender-43-dev`, and `blender-44-dev`. Every deleted tip was confirmed reachable
+from a tag before deletion. To recover one, branch from its tag.
 
 ## Outstanding
 
@@ -71,6 +85,11 @@ supported. Keep all 117 tags.
   so it was left alone, but it is not this fork's to rely on.
 - `ForumButton` in `tools/credits.py` is registered but drawn by no panel, and
   its URL points at a third-party forum thread. Dead code; removal not requested.
+- `.gitmodules` still points `extern_tools/imscale` at
+  `git@github.com:teamneoneko/immersive_scaler.git` over SSH. The submodule is
+  uninitialized and absent, and every runtime reference now points at
+  `Alrauna/immersive_scaler`, so this is stale but inert. Repointing it is a
+  separate decision.
 - `FixArmature.cantFix3` and `update_dictionary.error.apiChanged` tell users to
   find Discord links in the credits panel. No such link exists there. Stale
   before this work started.
