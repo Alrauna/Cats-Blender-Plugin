@@ -2,13 +2,6 @@
 
 Branches `main` and `blender-52`, version `5.2.0-alpha.1`.
 
-## Action required from the maintainer
-
-**Set `main` as the default branch** in the GitHub repository settings. This
-cannot be done from the CLI without a token. `blender-52` is still the default,
-so until it is switched, visitors land on `blender-52` rather than `main`. The two
-branches are identical at the commit `main` was created from.
-
 ## State
 
 The Blender 5.2 port is functionally complete. `tools/` and `ui/` carry the same
@@ -65,10 +58,11 @@ returned 404 and this fork has no website. Registered classes are 136, down from
 
 ### Topology
 
-`main` and `blender-52` are identical. `blender-45` and `blender-45-dev` are kept
-because Blender 4.5 LTS is still supported. Fifteen branches for Blender 3.6
-through 5.0 were deleted, along with the local `blender-50` and the `upstream`
-remote that pointed at `git.disroot.org/Neoneko`.
+`main` is the default branch. `main` and `blender-52` are identical; keep them in
+step when committing to either. `blender-45` and `blender-45-dev` are kept because
+Blender 4.5 LTS is still supported. Fifteen branches for Blender 3.6 through 5.0
+were deleted, along with the local `blender-50` and the `upstream` remote that
+pointed at `git.disroot.org/Neoneko`.
 
 All 117 original tags are kept, plus nine `archive/<branch>` tags created for the
 branch tips no release tag reached: `Welcome`, `blender-36-dev`, `blender-40`,
