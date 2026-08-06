@@ -19,10 +19,16 @@ that branch loses no user-facing prose.
 
 **Maintainer identity.** Alrauna is the current maintainer. Prior maintainers are
 credited, not erased: Absolute Quantum with Hotox and GiveMeAllYourCats created
-the original project; Team Neoneko, with Yusarina and 989onan, maintained the
-unofficial fork this one descends from. Named upstream contributors are carried
-forward verbatim: Hotox, Shotariya, Neitri, Kiraver, Jordo, Ruubick, 989onan,
-rurre, Feilen, triazo, Mysteryem.
+the original project; Team Neoneko, with Yusarina, maintained the unofficial fork
+this one descends from. Named upstream contributors are carried forward verbatim:
+Hotox, Shotariya, Neitri, Kiraver, Jordo, Ruubick, 989onan, rurre, Feilen,
+triazo, Mysteryem.
+
+989onan is a contributor, not a Team Neoneko maintainer. The only source claiming
+otherwise was the upstream `CreditsPanel.maintainers2` string; the Welcome
+README listed them under code contributors, `tools/importer.py` records their
+work as donated to the project, and the commit record shows 2 commits against
+Yusarina's 1311.
 
 **Upstream wikis.** `teamneoneko` and `unofficalcats` are archived. Their wikis
 remain the only feature documentation that exists, so links to them stay but are

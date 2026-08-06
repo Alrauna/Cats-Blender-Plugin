@@ -40,7 +40,7 @@ Some features need additional add-ons:
 - **Material Combiner**, for texture atlasing:
   [Alrauna/material-combiner-addon](https://github.com/Alrauna/material-combiner-addon)
 - **Immersive Scaler**, for scaling tools:
-  [triazo/immersive_scaler](https://github.com/triazo/immersive_scaler)
+  [Alrauna/immersive_scaler](https://github.com/Alrauna/immersive_scaler)
 
 ## Install
 
@@ -109,7 +109,7 @@ Quantum](https://github.com/absolute-quantum/cats-blender-plugin) — Hotox and
 GiveMeAllYourCats. That project is no longer developed.
 
 **Then maintained** as the unofficial Cats Blender Plugin by **Team Neoneko**,
-with **Yusarina** and **989onan** carrying it through Blender 3.6 to 5.0. That
+with **Yusarina** carrying it through Blender 3.6 to 5.0. That
 project is now archived. The Blender 5.2 work here starts from their 5.0 release
 and would not have been possible without it. Thank you.
 
@@ -126,8 +126,10 @@ Yusarina.
 - [MMD Tools](https://github.com/UuuNyaa/blender_mmd_tools), bundled as
   `extern_tools/mmd_tools_local`
 - [Material Combiner](https://github.com/Alrauna/material-combiner-addon), forked
-  from [Grim-es/material-combiner-addon](https://github.com/Grim-es/material-combiner-addon)
-- [Immersive Scaler](https://github.com/triazo/immersive_scaler)
+  from Team Neoneko's fork of
+  [Grim-es/material-combiner-addon](https://github.com/Grim-es/material-combiner-addon)
+- [Immersive Scaler](https://github.com/Alrauna/immersive_scaler), forked from
+  [triazo/immersive_scaler](https://github.com/triazo/immersive_scaler)
 
 ## Feedback
 
