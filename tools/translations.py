@@ -35,7 +35,7 @@ dictionary: dict[str, str] = dict()
 languages = []
 verbose = True
 last_loaded_language = None
-dictionary_download_link = "https://raw.githubusercontent.com/teamneoneko/Cats-Blender-Plugin-Unofficial-translations/5x-translations/dictionary.json"
+dictionary_download_link = "https://raw.githubusercontent.com/Alrauna/Cats-Blender-Plugin-Unofficial-translations/5x-translations/dictionary.json"
 _addon_startup_time = None
 _pending_one_shot_timers = set()
 
@@ -302,7 +302,7 @@ class DownloadTranslations(bpy.types.Operator):
             return {'CANCELLED'}
 
         # GitHub repository and folder information
-        repo_owner = "teamneoneko"
+        repo_owner = "Alrauna"
         repo_name = "Cats-Blender-Plugin-Unofficial-translations"
         branch = "5x-translations"
         folder_path = "UI%20Tanslations"
