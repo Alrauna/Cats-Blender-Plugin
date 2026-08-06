@@ -59,10 +59,6 @@ class CreditsPanel(ToolPanel, bpy.types.Panel):
         help_row.operator(Credits.HelpButton.bl_idname, 
                     icon_value=Iconloader.preview_collections["custom_icons"]["help1"].icon_id)
         
-        support_row = actions_col.row(align=True)
-        support_row.scale_y = 1.3
-        support_row.operator(Credits.SupportButton.bl_idname, icon='HEART')
-        
         patch_row = actions_col.row(align=True)
         patch_row.scale_y = 1.0
         patch_row.operator(Credits.PatchnotesButton.bl_idname, icon='WORDWRAP_ON')
