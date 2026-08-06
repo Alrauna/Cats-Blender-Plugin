@@ -83,16 +83,16 @@ from a tag before deletion. To recover one, branch from its tag.
 - `HelpButton.URL` in all four translation files points at
   `catsblenderplugin.xyz/wiki.html`, a Team Neoneko site. It still returns 200,
   so it was left alone, but it is not this fork's to rely on.
-- `ForumButton` in `tools/credits.py` is registered but drawn by no panel, and
-  its URL points at a third-party forum thread. Dead code; removal not requested.
-- `.gitmodules` still points `extern_tools/imscale` at
-  `git@github.com:teamneoneko/immersive_scaler.git` over SSH. The submodule is
-  uninitialized and absent, and every runtime reference now points at
-  `Alrauna/immersive_scaler`, so this is stale but inert. Repointing it is a
+- `.gitmodules` points `extern_tools/imscale` at
+  `https://github.com/Alrauna/immersive_scaler.git`, but no gitlink is registered
+  for that path, so the submodule is still absent at runtime. Registering it is a
   separate decision.
 - `FixArmature.cantFix3` and `update_dictionary.error.apiChanged` tell users to
-  find Discord links in the credits panel. No such link exists there. Stale
-  before this work started.
+  find forum and Discord links in the credits panel. Neither exists there. Both
+  messages were already stale before this work started, and the credits panel now
+  holds only Help and Patch notes. Rewording them needs a decision on where users
+  should actually report problems; the issue tracker is the only channel this fork
+  has.
 
 ## Packaging guardrails
 
