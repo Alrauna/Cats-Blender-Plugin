@@ -848,6 +848,14 @@
         "EyeTrackingPanel.troubleshooting.restPosition": "• 아마추어가 기본 자세에 있는지 확인",
         "merge_armatures.error.mustapplytransforms": "아마추어의 X, Y, Z축 스케일 값이 서로 다르며,\n균일한 스케일링(모든 축이 동일한 스케일 값)이 되어있지 않습니다.\n\n아마추어 병합 전 이를 수정하는 것은\n올바른 본 변환과 변형 문제를 방지하는데 중요합니다.\n\n이 경고에도 불구하고 병합을 진행하려면\n병합을 시작하기 전에 '트랜스폼 적용'을 체크해주세요.",
         "Scene.progress_update.label": "진행률",
-        "Scene.progress_update.desc": "작업의 진행률 표시기"
+        "Scene.progress_update.desc": "작업의 진행률 표시기",
+        "DownloadSeparatorButton.label": "Alpha Material Separator 다운로드",
+        "DownloadSeparatorButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator/releases/latest",
+        "DownloadSeparatorButton.success": "Alpha Material Separator 릴리스를 열었습니다",
+        "DownloadSeparatorButton.dialog": "Alpha Material Separator 릴리스를 엽니다:",
+        "DownloadSeparatorButton.confirm": "확인을 누르면 열리고, 취소하면 직접 방문합니다.",
+        "OverdrawHelpButton.label": "오버드로 방지 정보",
+        "OverdrawHelpButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator",
+        "OverdrawHelpButton.success": "Alpha Material Separator 페이지를 열었습니다"
     }
 }

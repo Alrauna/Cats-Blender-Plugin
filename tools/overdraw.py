@@ -1,8 +1,12 @@
 # MIT License
 
 import json
+import webbrowser
 
 import bpy
+
+from .register import register_wrap
+from .translations import t
 
 
 SEPARATOR_OPERATOR_NAMESPACE = "alpha_material_separator"
@@ -95,3 +99,40 @@ def configure_analysis(operator_props, settings):
         value = getattr(settings, name, None)
         if value is not None:
             setattr(operator_props, name, value)
+
+
+@register_wrap
+class DownloadSeparatorButton(bpy.types.Operator):
+    bl_idname = 'cats_overdraw.download_separator'
+    bl_label = t('DownloadSeparatorButton.label')
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        webbrowser.open(t('DownloadSeparatorButton.URL'))
+
+        self.report({'INFO'}, t('DownloadSeparatorButton.success'))
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=500)
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.label(text=t('DownloadSeparatorButton.dialog'), icon='INFO')
+        col.separator()
+        col.label(text=t('DownloadSeparatorButton.URL'))
+        col.separator()
+        col.label(text=t('DownloadSeparatorButton.confirm'))
+
+
+@register_wrap
+class OverdrawHelpButton(bpy.types.Operator):
+    bl_idname = 'cats_overdraw.help'
+    bl_label = t('OverdrawHelpButton.label')
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        webbrowser.open(t('OverdrawHelpButton.URL'))
+
+        self.report({'INFO'}, t('OverdrawHelpButton.success'))
+        return {'FINISHED'}

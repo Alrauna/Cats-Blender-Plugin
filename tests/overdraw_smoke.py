@@ -151,10 +151,34 @@ class OverdrawHelperTests(unittest.TestCase):
         self.assertFalse(hasattr(props, "address_mode"))
 
 
+class OverdrawOperatorTests(unittest.TestCase):
+    def test_cats_overdraw_operators_are_registered(self):
+        for name in ("download_separator", "help"):
+            with self.subTest(operator=name):
+                self.assertTrue(hasattr(bpy.ops.cats_overdraw, name))
+                self.assertIsNotNone(
+                    getattr(bpy.ops.cats_overdraw, name).get_rna_type()
+                )
+
+    def test_operator_urls_point_at_the_separator_repository(self):
+        translations = importlib.import_module(
+            cats_module_name() + ".tools.translations"
+        )
+        for key in ("DownloadSeparatorButton.URL", "OverdrawHelpButton.URL"):
+            with self.subTest(key=key):
+                self.assertIn(
+                    "github.com/Alrauna/blender-alpha-material-separator",
+                    translations.t(key),
+                )
+
+
 def main() -> int:
-    result = unittest.TextTestRunner(verbosity=2).run(
-        unittest.defaultTestLoader.loadTestsFromTestCase(OverdrawHelperTests)
-    )
+    loader = unittest.defaultTestLoader
+    suite = unittest.TestSuite([
+        loader.loadTestsFromTestCase(OverdrawHelperTests),
+        loader.loadTestsFromTestCase(OverdrawOperatorTests),
+    ])
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
     return 0 if result.wasSuccessful() else 1
 
 
