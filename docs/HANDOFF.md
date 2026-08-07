@@ -70,10 +70,43 @@ branch tips no release tag reached: `Welcome`, `blender-36-dev`, `blender-40`,
 `blender-43-dev`, and `blender-44-dev`. Every deleted tip was confirmed reachable
 from a tag before deletion. To recover one, branch from its tag.
 
+## Overdraw Prevention
+
+`ui/optimization.py` gained an **Overdraw Prevention** sub-panel between Atlas and
+Material. It drives the external Blender Alpha Material Separator extension —
+`Alrauna/blender-alpha-material-separator`, id `alpha_material_separator` — through
+its four published workflow operators, and offers a download button when the
+separator is absent.
+
+`tools/overdraw.py` holds the integration. Nothing imports separator code:
+detection is `hasattr` on `bpy.ops.alpha_material_separator` plus the
+`WindowManager.alpha_material_separator_api` property, because the separator is an
+extension whose module path varies with the repository it was installed from. This
+is deliberately not the `addon_utils` name scan the Material Combiner integration
+uses. Status text is the separator's own `message` field; CATS never composes it.
+
+`configure_analysis()` copies seven `analyze` operator properties from the
+separator's public settings, plus the override payload, because `analyze` reads its
+own RNA and never consults those settings itself. `api_major = 1` is the version
+handshake; the separator refuses a mismatch.
+
+Registered CATS classes are 138: 135 before this work, plus two `cats_overdraw`
+operators and one panel.
+
 ## Outstanding
 
 - No interactive coverage exists for import/export, file browser, or material
   preview workflows. Background tests cannot substitute for these.
+- **The Overdraw Prevention AMS-present path is unverified.** CI installs CATS
+  alone, so `tests/overdraw_smoke.py` only covers the helpers and the
+  separator-absent branch. The four action buttons, the status line, and whether
+  the mirrored settings actually reach `analyze` have never been exercised. This
+  needs manual maintainer testing with the separator installed.
+- CATS mirrors seven `analyze` operator property names plus the override payload.
+  These are not part of the separator's `api_contract.py`, so a separator release
+  that renames one needs a matching CATS change. `api_major` is the guard that
+  turns a mismatch into a refusal rather than a wrong result.
+- The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review.
 - The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
   review. The maintainer name was left untranslated inside each sentence.
 - The credits panel's Help button and three in-app wiki links point at the

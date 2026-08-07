@@ -41,6 +41,8 @@ Some features need additional add-ons:
   [Alrauna/material-combiner-addon](https://github.com/Alrauna/material-combiner-addon)
 - **Immersive Scaler**, for scaling tools:
   [Alrauna/immersive_scaler](https://github.com/Alrauna/immersive_scaler)
+- **Alpha Material Separator**, for Overdraw Prevention:
+  [Alrauna/blender-alpha-material-separator](https://github.com/Alrauna/blender-alpha-material-separator)
 
 ## Install
 
