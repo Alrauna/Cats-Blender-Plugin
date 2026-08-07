@@ -9,6 +9,7 @@ from .main import ToolPanel, draw_info_box, draw_error_box
 from ..tools import common as Common
 from ..tools import iconloader as Iconloader
 from ..tools import atlas as Atlas
+from ..tools import overdraw as Overdraw
 from ..tools import material as Material
 from ..tools import bonemerge as Bonemerge
 from ..tools import rootbone as Rootbone
@@ -279,6 +280,97 @@ class AtlasSubPanel(ToolPanel, bpy.types.Panel):
             row = col.row(align=True)
             row.scale_y = 1.3
             row.operator(button_operator, icon=button_icon)
+
+
+@register_wrap
+class OverdrawSubPanel(ToolPanel, bpy.types.Panel):
+    bl_idname = 'VIEW3D_PT_optimize_overdraw_v3'
+    bl_label = t('OptimizePanel.overdraw.label')
+    bl_parent_id = 'VIEW3D_PT_optimize_v3'
+    bl_options = set()
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column(align=True)
+
+        try:
+            desc_col = col.column(align=True)
+            desc_col.scale_y = 0.75
+            desc_col.label(text=t('OptimizePanel.overdrawDesc1'))
+            desc_col.label(text=t('OptimizePanel.overdrawDesc2'))
+
+            col.separator()
+
+            box = col.box()
+            row = box.row(align=True)
+            row.scale_y = 0.75
+            split = row.split(factor=0.7)
+            split.label(text=t('OptimizePanel.overdrawAuthor'), icon='SHADERFX')
+            split.operator(Overdraw.OverdrawHelpButton.bl_idname, text="", icon='QUESTION')
+
+            col.separator()
+
+            if not Overdraw.is_available():
+                draw_error_box(col, [
+                    t('OptimizePanel.overdrawNotInstalled1'),
+                    t('OptimizePanel.overdrawNotInstalled2'),
+                ])
+                col.separator()
+                row = col.row(align=True)
+                row.scale_y = 1.3
+                row.operator(Overdraw.DownloadSeparatorButton.bl_idname, icon=globs.ICON_URL)
+                return
+
+            window_manager = context.window_manager
+            message = Overdraw.status_message(
+                getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
+            )
+            if message:
+                status_col = col.box().column(align=True)
+                status_col.scale_y = 0.75
+                status_col.label(text=message, icon='INFO')
+                col.separator()
+
+            settings = getattr(window_manager, Overdraw.SEPARATOR_SETTINGS_PROPERTY, None)
+
+            actions = col.column(align=True)
+            actions.scale_y = 1.3
+            Overdraw.configure_analysis(
+                actions.operator(
+                    'alpha_material_separator.analyze',
+                    text=t('OptimizePanel.overdrawAnalyze'),
+                    icon='VIEWZOOM',
+                ),
+                settings,
+            )
+            actions.operator(
+                'alpha_material_separator.select_faces',
+                text=t('OptimizePanel.overdrawPreview'),
+                icon='RESTRICT_SELECT_OFF',
+            )
+            actions.operator(
+                'alpha_material_separator.assign_materials',
+                text=t('OptimizePanel.overdrawApply'),
+                icon='MATERIAL',
+            )
+
+            col.separator()
+
+            clear = col.column(align=True)
+            clear.operator(
+                'alpha_material_separator.clear_results',
+                text=t('OptimizePanel.overdrawClear'),
+                icon='X',
+            )
+
+            col.separator()
+
+            note_col = col.column(align=True)
+            note_col.scale_y = 0.75
+            note_col.label(text=t('OptimizePanel.overdrawExpertNote'))
+
+        except Exception:
+            draw_error_box(col, [t('OptimizePanel.overdrawInterfaceError')])
 
 
 @register_wrap

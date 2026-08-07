@@ -860,6 +860,18 @@
         "DownloadSeparatorButton.confirm": "Click OK to open, or Cancel to visit manually.",
         "OverdrawHelpButton.label": "About Overdraw Prevention",
         "OverdrawHelpButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator",
-        "OverdrawHelpButton.success": "Alpha Material Separator page opened"
+        "OverdrawHelpButton.success": "Alpha Material Separator page opened",
+        "OptimizePanel.overdraw.label": "Overdraw Prevention",
+        "OptimizePanel.overdrawDesc1": "Moves alpha-covered faces onto their own material",
+        "OptimizePanel.overdrawDesc2": "so solid faces stop paying the transparency cost.",
+        "OptimizePanel.overdrawAuthor": "Uses Alpha Material Separator",
+        "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator is not installed.",
+        "OptimizePanel.overdrawNotInstalled2": "Install it to use Overdraw Prevention.",
+        "OptimizePanel.overdrawAnalyze": "Analyze Selected Meshes",
+        "OptimizePanel.overdrawPreview": "Preview Faces to Move",
+        "OptimizePanel.overdrawApply": "Apply Material Separation",
+        "OptimizePanel.overdrawClear": "Clear Results",
+        "OptimizePanel.overdrawExpertNote": "Expert options are in the AMS tab.",
+        "OptimizePanel.overdrawInterfaceError": "Could not draw Overdraw Prevention. Use the AMS tab."
     }
 }

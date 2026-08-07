@@ -818,6 +818,18 @@
         "DownloadSeparatorButton.confirm": "点击确定打开，或取消后手动访问。",
         "OverdrawHelpButton.label": "关于过度绘制优化",
         "OverdrawHelpButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator",
-        "OverdrawHelpButton.success": "已打开 Alpha Material Separator 页面"
+        "OverdrawHelpButton.success": "已打开 Alpha Material Separator 页面",
+        "OptimizePanel.overdraw.label": "过度绘制优化",
+        "OptimizePanel.overdrawDesc1": "将带 Alpha 的面移到单独材质，",
+        "OptimizePanel.overdrawDesc2": "使不透明面不再承担透明开销。",
+        "OptimizePanel.overdrawAuthor": "使用 Alpha Material Separator",
+        "OptimizePanel.overdrawNotInstalled1": "未安装 Alpha Material Separator。",
+        "OptimizePanel.overdrawNotInstalled2": "请安装后再使用过度绘制优化。",
+        "OptimizePanel.overdrawAnalyze": "分析所选网格",
+        "OptimizePanel.overdrawPreview": "预览待移动的面",
+        "OptimizePanel.overdrawApply": "应用材质分离",
+        "OptimizePanel.overdrawClear": "清除结果",
+        "OptimizePanel.overdrawExpertNote": "高级选项位于 AMS 选项卡。",
+        "OptimizePanel.overdrawInterfaceError": "无法绘制过度绘制优化，请使用 AMS 选项卡。"
     }
 }

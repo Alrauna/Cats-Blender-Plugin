@@ -856,6 +856,18 @@
         "DownloadSeparatorButton.confirm": "확인을 누르면 열리고, 취소하면 직접 방문합니다.",
         "OverdrawHelpButton.label": "오버드로 방지 정보",
         "OverdrawHelpButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator",
-        "OverdrawHelpButton.success": "Alpha Material Separator 페이지를 열었습니다"
+        "OverdrawHelpButton.success": "Alpha Material Separator 페이지를 열었습니다",
+        "OptimizePanel.overdraw.label": "오버드로 방지",
+        "OptimizePanel.overdrawDesc1": "알파가 있는 면만 별도 머티리얼로 옮겨",
+        "OptimizePanel.overdrawDesc2": "불투명한 면의 투명 처리 비용을 줄입니다.",
+        "OptimizePanel.overdrawAuthor": "Alpha Material Separator 사용",
+        "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator가 설치되지 않았습니다.",
+        "OptimizePanel.overdrawNotInstalled2": "사용하려면 설치하세요.",
+        "OptimizePanel.overdrawAnalyze": "선택한 메시 분석",
+        "OptimizePanel.overdrawPreview": "이동할 면 미리보기",
+        "OptimizePanel.overdrawApply": "머티리얼 분리 적용",
+        "OptimizePanel.overdrawClear": "결과 지우기",
+        "OptimizePanel.overdrawExpertNote": "고급 옵션은 AMS 탭에 있습니다.",
+        "OptimizePanel.overdrawInterfaceError": "오버드로 방지를 그릴 수 없습니다. AMS 탭을 사용하세요."
     }
 }

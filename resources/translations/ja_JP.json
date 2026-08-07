@@ -853,6 +853,18 @@
         "DownloadSeparatorButton.confirm": "OK で開き、キャンセルで手動アクセスします。",
         "OverdrawHelpButton.label": "オーバードロー対策について",
         "OverdrawHelpButton.URL": "https://github.com/Alrauna/blender-alpha-material-separator",
-        "OverdrawHelpButton.success": "Alpha Material Separator のページを開きました"
+        "OverdrawHelpButton.success": "Alpha Material Separator のページを開きました",
+        "OptimizePanel.overdraw.label": "オーバードロー対策",
+        "OptimizePanel.overdrawDesc1": "アルファのある面を専用マテリアルへ移動し、",
+        "OptimizePanel.overdrawDesc2": "不透明な面の透過コストを削減します。",
+        "OptimizePanel.overdrawAuthor": "Alpha Material Separator を使用",
+        "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator がインストールされていません。",
+        "OptimizePanel.overdrawNotInstalled2": "使用するにはインストールしてください。",
+        "OptimizePanel.overdrawAnalyze": "選択メッシュを解析",
+        "OptimizePanel.overdrawPreview": "移動する面をプレビュー",
+        "OptimizePanel.overdrawApply": "マテリアル分離を適用",
+        "OptimizePanel.overdrawClear": "結果をクリア",
+        "OptimizePanel.overdrawExpertNote": "詳細設定は AMS タブにあります。",
+        "OptimizePanel.overdrawInterfaceError": "オーバードロー対策を描画できません。AMS タブを使用してください。"
     }
 }
