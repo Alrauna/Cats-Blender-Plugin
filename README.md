@@ -41,13 +41,12 @@ Some features need additional add-ons:
   [Alrauna/material-combiner-addon](https://github.com/Alrauna/material-combiner-addon)
 - **Immersive Scaler**, for scaling tools:
   [Alrauna/immersive_scaler](https://github.com/Alrauna/immersive_scaler)
-- **Alpha Material Separator** 1.2.0 or newer, for Overdraw Prevention:
+- **Alpha Material Separator** 1.3.0 or newer, for Overdraw Prevention:
   [Alrauna/blender-alpha-material-separator](https://github.com/Alrauna/blender-alpha-material-separator)
 
-  Overdraw Prevention relies on the separator to report when an analysis stops
-  matching the scene. On 1.1.1 and earlier the panel can keep showing a completed
-  analysis for a result the separator has already marked stale, and Apply will
-  refuse it.
+  Overdraw Prevention reads the separator's published workflow state to decide when
+  Preview and Apply are available. Separator 1.2.0 and earlier do not publish it, so
+  the panel offers both buttons at all times and the separator refuses them itself.
 
 ## Install
 

@@ -93,43 +93,48 @@ handshake; the separator refuses a mismatch.
 Registered CATS classes are 138: 135 before this work, plus two `cats_overdraw`
 operators and one panel.
 
-### Requires Alpha Material Separator 1.2.0 or newer
+### Requires Alpha Material Separator 1.3.0 or newer
 
-Overdraw Prevention depends on the separator to report when a completed analysis
-stops matching the scene. At 1.1.1 and earlier the separator published
-`validation_state` and `last_status_code` independently, so a result could go
-`STALE` while the status still read `ANALYSIS_COMPLETE`; CATS reads only the
-status, so the panel showed a result the separator had already invalidated.
-Separator 1.2.0 publishes a `RESULT_STALE` status on every stale transition, which
-CATS surfaces without a code change. `README.md` records the minimum.
+Separator 1.3.0 publishes `workflow_json` on
+`WindowManager.alpha_material_separator_api` — a computed `get=` property carrying the
+same workflow snapshot the separator's own panel draws from. `Overdraw.workflow_state()`
+reads it, and the panel draws Preview when `can_preview`, Apply when `can_apply`, and
+Clear when `analysis_id` is set. Because the separator computes that snapshot once for
+both surfaces, CATS's gating cannot drift from what the separator will accept.
 
-CATS cannot detect the separator's release version — the published `api_version`
-is `1.2` on both 1.1.1 and 1.2.0 — so this is documented rather than gated.
+1.3.0 also publishes `severity` in every status payload, so CATS no longer keeps its own
+list of which status codes are serious. `Overdraw.status_severity()` reads it and
+defaults to `OK` when absent.
 
-`status_is_actionable()` routes `RESULT_STALE` and `STALE_ANALYSIS` through
-`draw_error_box` instead of the plain `INFO` box. Without it, a stale result and a
-refused Apply render identically to success, which matters because Apply on a
-stale result returns `CANCELLED` and does nothing visible.
+A stale result is raised to an error box even though the separator files `RESULT_STALE`
+as `INFO`. The separator can afford `INFO` because its own panel reddens the step it
+blocks; CATS has no equivalent step, so the status line carries the severity instead.
+
+`RECHECK_PENDING` is deliberately not treated as stale. The separator raises it from
+depsgraph notifications, which Blender also emits for harmless selection and mode
+changes, and resolves it on the next action. Treating it as staleness would blank the
+panel on a mode switch.
+
+When `workflow_json` is absent — separator 1.2.0 or earlier — every button draws, which
+is what CATS did before this work. There is no upgrade prompt; `README.md` records the
+minimum. CATS cannot enforce it: the separator's published extension version derives
+from its manifest, and its `api_version` is the only field that distinguishes the
+releases.
 
 ## Outstanding
 
 - No interactive coverage exists for import/export, file browser, or material
   preview workflows. Background tests cannot substitute for these.
-- The Overdraw Prevention AMS-present path is verified in background mode against
-  separator 1.2.0 and CATS `f8584f2`: all four operators reached `FINISHED`, the
-  status line was readable at every step, all nine analyze properties were
-  accepted, `probe_mat__AMS_ALPHA` was created, and the stale sequence
-  `ANALYSIS_COMPLETE` → `RESULT_STALE` → `STALE_ANALYSIS` was reproduced with the
-  correct severity at each step. CI still installs CATS alone, so
-  `tests/overdraw_smoke.py` covers only the helpers and the separator-absent
-  branch. Still unverified and GUI-only: panel repaint, the download confirmation
-  dialog, and Edit Mode preview visibility.
-- CATS reads two separator status codes by value, `RESULT_STALE` and
-  `STALE_ANALYSIS`. If the separator adds a third code meaning the same thing,
-  CATS falls back to the plain `INFO` box — a missed warning, not a breakage.
-  The seven mirrored `analyze` property names are now guarded upstream as
-  `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into
-  a refusal rather than a wrong result.
+- Overdraw Prevention is verified in background mode against separator 1.3.0 by
+  `tests/overdraw_workflow_probe.py`: gating is off before analysis, open after it,
+  closed by a settings change, and correctly left open by a mesh edit. That file skips
+  itself when the separator is absent, so CI can run it in the CATS-only profile
+  without installing the separator. Still unverified and GUI-only: panel repaint on a
+  separator state change, and the download confirmation dialog.
+- CATS no longer reads any separator status code by value; severity and gating both come
+  from published fields. The seven mirrored `analyze` property names are guarded upstream
+  as `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into a
+  refusal rather than a wrong result.
 - The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review.
 - The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
   review. The maintainer name was left untranslated inside each sentence.
