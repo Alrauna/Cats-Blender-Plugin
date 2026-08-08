@@ -181,6 +181,12 @@ class WorkflowPolicyTests(unittest.TestCase):
         ):
             self.assertIn(path, self.workflow)
 
+    def test_fixture_runner_uses_host_python_certificate_store(self):
+        self.assertEqual(2, self.workflow.count("python tests/run.py"))
+        self.assertNotIn(
+            "${{ steps.blender.outputs.python }}' tests/run.py", self.workflow
+        )
+
     def test_release_is_manual_main_only_and_write_scoped(self):
         self.assertIn("github.event_name == 'workflow_dispatch'", self.workflow)
         self.assertIn("github.ref == 'refs/heads/main'", self.workflow)

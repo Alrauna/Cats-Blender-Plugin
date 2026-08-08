@@ -151,7 +151,7 @@ jobs:
 
       - name: Run armature tests
         run: >-
-          '${{ steps.blender.outputs.python }}' tests/run.py
+          python tests/run.py
           --blend '${{ steps.blender.outputs.blender }}'
           --test './tests/armatures/*'
           --bfile './tests/armatures/armature.*'
@@ -159,7 +159,7 @@ jobs:
 
       - name: Run shape-key tests
         run: >-
-          '${{ steps.blender.outputs.python }}' tests/run.py
+          python tests/run.py
           --blend '${{ steps.blender.outputs.blender }}'
           --test './tests/shapekeys/shape_key_to_basis'
           --bfile './tests/shapekeys/shapekey.shape_key_to_basis'
