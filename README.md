@@ -45,8 +45,8 @@ Some features need additional add-ons:
   [Alrauna/blender-alpha-material-separator](https://github.com/Alrauna/blender-alpha-material-separator)
 
   Overdraw Prevention reads the separator's published workflow state to decide when
-  Preview and Apply are available. Separator 1.2.0 and earlier do not publish it, so
-  the panel offers both buttons at all times and the separator refuses them itself.
+  Preview and Apply are available. An older separator does not publish it, so the panel
+  reports the requirement and offers the download button instead of the workflow.
 
 ## Install
 

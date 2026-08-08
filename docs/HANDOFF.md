@@ -1,6 +1,6 @@
 # Handoff
 
-Branches `main` and `blender-52`, version `5.2.0-alpha.1`.
+Branches `main` and `blender-52`, version `5.2.1`.
 
 ## State
 
@@ -72,12 +72,15 @@ from a tag before deletion. To recover one, branch from its tag.
 
 ## Overdraw Prevention
 
-Branch `feature/overdraw-prevention` is complete and ready for review at `cbf8a9c`,
+Branch `feature/overdraw-prevention` is complete and ready for review at `fd90759`,
 14 commits ahead of `main` and unpushed. Its objective — the Overdraw Prevention
 panel and the workflow gating that makes it mirror the separator — is met, the full
-change gate passes, and the maintainer has confirmed the panel in the GUI. The
-recommended next action is a pull request onto `main`; nothing further belongs on
-this branch.
+change gate passes, and the maintainer has confirmed the panel in the GUI.
+
+Branch `feature/separator-version-gate` is stacked on it, with the maintainer's
+explicit approval for the stacked workflow. It enforces the separator 1.3.0 floor
+and releases CATS as `5.2.1`. Both branches are unpushed; `feature/overdraw-prevention`
+merges onto `main` first, then this branch rebases onto the updated `main`.
 
 `ui/optimization.py` gained an **Overdraw Prevention** sub-panel between Atlas and
 Material. It drives the external Blender Alpha Material Separator extension —
@@ -122,11 +125,13 @@ depsgraph notifications, which Blender also emits for harmless selection and mod
 changes, and resolves it on the next action. Treating it as staleness would blank the
 panel on a mode switch.
 
-When `workflow_json` is absent — separator 1.2.0 or earlier — every button draws, which
-is what CATS did before this work. There is no upgrade prompt; `README.md` records the
-minimum. CATS cannot enforce it: the separator's published extension version derives
-from its manifest, and its `api_version` is the only field that distinguishes the
-releases.
+An installed separator that publishes an API older than 1.3 is refused:
+`Overdraw.meets_minimum_api()` compares the published `api_version` against
+`SEPARATOR_MINIMUM_API`, and the panel draws the requirement and the download button
+instead of the workflow. An unreadable version counts as too old, which only an older
+separator produces. This replaces the earlier silent fallback, which was only there
+because the separator's release version could not be told apart from its API version
+before 1.3.0.
 
 ## Outstanding
 
@@ -145,7 +150,13 @@ releases.
   from published fields. The seven mirrored `analyze` property names are guarded upstream
   as `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into a
   refusal rather than a wrong result.
-- The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review.
+- The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review,
+  including the two new keys `OptimizePanel.overdrawOutdated1` and
+  `OptimizePanel.overdrawOutdated2`.
+- The blocked path has no automated coverage against a genuinely old separator. The
+  `1.2.0`-named archive in `.local-references/` is 1.3 code with a 1.2.0 manifest, so it
+  reports `api_version 1.3` and passes the gate. `tests/overdraw_smoke.py` covers the
+  decision logic with stubs; the drawn result on a real pre-1.3 separator is GUI-only.
 - The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
   review. The maintainer name was left untranslated inside each sentence.
 - The credits panel's Help button and three in-app wiki links point at the
