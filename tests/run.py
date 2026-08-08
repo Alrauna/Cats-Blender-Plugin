@@ -14,6 +14,7 @@ import argparse
 import fnmatch
 import gzip
 import glob
+import hashlib
 import os
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).resolve().parent
 REPOSITORY_DIR = TESTS_DIR.parent
 BLENDER_FILE_MAGIC = b"BLENDER"
+MAX_TEST_ASSET_BYTES = 256 * 1024 * 1024
 RUN_ONCE = {"atlas.test.py", "extensions.test.py", "syntax.test.py"}
 
 
@@ -34,20 +36,24 @@ RUN_ONCE = {"atlas.test.py", "extensions.test.py", "syntax.test.py"}
 class TestAsset:
     relative_path: str
     url: str
+    sha256: str
 
 
 TEST_ASSETS = (
     TestAsset(
         "armatures/armature.ryuko.blend",
         "https://www.dropbox.com/s/74fj6msbyn3c7rn/armature.ryuko.blend?dl=1",
+        "d92b918968e7d0f2d06ef75ba739b85091fc5409954d2dcd880aed21af09a6db",
     ),
     TestAsset(
         "armatures/armature.bonetranslationerror.blend",
         "https://www.dropbox.com/s/ckoseplcfdozpeu/armature.translationerror.blend?dl=1",
+        "1b4c3e2cd02a5bd611c44aa8261f6a45c07f67cbb81d7e09cbe3ff85dc788014",
     ),
     TestAsset(
         "shapekeys/shapekey.shape_key_to_basis.blend",
         "https://www.dropbox.com/s/d0efnrkauq596ng/ApplyShapeToBasisTest.blend?dl=1",
+        "a596211cfcd3c6bdd7b1b78218de2940b9c9b8f96b756374a9a1a55b73df8223",
     ),
 )
 
@@ -63,6 +69,32 @@ def read_blender_file_magic(path: Path) -> bytes:
         except OSError:
             return magic
     return magic
+
+
+def sha256_file(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def verify_asset(path: Path, asset: TestAsset) -> None:
+    actual = sha256_file(path)
+    if actual != asset.sha256:
+        raise RuntimeError(
+            f"Test asset SHA-256 mismatch for {path}: "
+            f"expected {asset.sha256}, got {actual}"
+        )
+    magic = read_blender_file_magic(path)
+    if magic != BLENDER_FILE_MAGIC:
+        raise RuntimeError(f"Test asset is not a Blender file: {path}")
+
+
+def copy_limited(source, destination, max_bytes: int) -> None:
+    copied = 0
+    while block := source.read(1024 * 1024):
+        copied += len(block)
+        if copied > max_bytes:
+            raise RuntimeError(f"Test asset exceeds {max_bytes}-byte size limit")
+        destination.write(block)
 
 
 def parse_args() -> argparse.Namespace:
@@ -175,9 +207,8 @@ def verify_blender_version(blender_exec: str, expected_series: str) -> None:
 def download_asset(asset: TestAsset, timeout: int) -> None:
     destination = TESTS_DIR / asset.relative_path
     if destination.is_file():
-        if read_blender_file_magic(destination) == BLENDER_FILE_MAGIC:
-            return
-        raise RuntimeError(f"Existing test asset is not a Blender file: {destination}")
+        verify_asset(destination, asset)
+        return
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
@@ -186,13 +217,9 @@ def download_asset(asset: TestAsset, timeout: int) -> None:
 
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response, temporary.open("wb") as output:
-            shutil.copyfileobj(response, output)
+            copy_limited(response, output, MAX_TEST_ASSET_BYTES)
 
-        magic = read_blender_file_magic(temporary)
-        if magic != BLENDER_FILE_MAGIC:
-            raise RuntimeError(
-                f"Download did not produce a Blender file (received {magic!r}): {asset.url}"
-            )
+        verify_asset(temporary, asset)
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
@@ -213,6 +240,7 @@ def blender_command(blender_exec: str, blend_file: Path, test_file: Path) -> lis
     return [
         blender_exec,
         "--background",
+        "--disable-autoexec",
         "--offline-mode",
         "-noaudio",
         str(blend_file),

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests import run as test_runner
 
 
 REPOSITORY_DIR = Path(__file__).resolve().parent.parent
@@ -135,6 +138,48 @@ class BlenderAcquisitionTests(unittest.TestCase):
         self.ci.require_blender_version("Blender 5.2.0 LTS")
         with self.assertRaisesRegex(ValueError, "unexpected"):
             self.ci.require_blender_version("Blender 5.2.1")
+
+
+class FixtureSecurityTests(unittest.TestCase):
+    def test_canonical_asset_hashes_are_committed(self):
+        self.assertEqual(
+            {
+                "armatures/armature.ryuko.blend": (
+                    "d92b918968e7d0f2d06ef75ba739b85091fc5409954d2dcd880aed21af09a6db"
+                ),
+                "armatures/armature.bonetranslationerror.blend": (
+                    "1b4c3e2cd02a5bd611c44aa8261f6a45c07f67cbb81d7e09cbe3ff85dc788014"
+                ),
+                "shapekeys/shapekey.shape_key_to_basis.blend": (
+                    "a596211cfcd3c6bdd7b1b78218de2940b9c9b8f96b756374a9a1a55b73df8223"
+                ),
+            },
+            {asset.relative_path: asset.sha256 for asset in test_runner.TEST_ASSETS},
+        )
+
+    def test_copy_limited_rejects_oversize_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "asset.part"
+            with target.open("wb") as output:
+                with self.assertRaisesRegex(RuntimeError, "size limit"):
+                    test_runner.copy_limited(io.BytesIO(b"12345"), output, 4)
+
+    def test_verify_asset_rejects_digest_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "asset.blend"
+            target.write_bytes(b"BLENDER-corrupt")
+            asset = test_runner.TestAsset(
+                "asset.blend", "https://example.test", "0" * 64
+            )
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                test_runner.verify_asset(target, asset)
+
+    def test_blender_command_disables_autoexec(self):
+        command = test_runner.blender_command(
+            "blender", Path("a.blend"), Path("t.py")
+        )
+        self.assertIn("--disable-autoexec", command)
+        self.assertIn("--offline-mode", command)
 
 
 if __name__ == "__main__":
