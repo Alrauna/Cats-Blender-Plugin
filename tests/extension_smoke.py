@@ -19,6 +19,8 @@ EXPECTED_OPERATORS = (
     ("cats_material", "combine_mats"),
     ("cats_manual", "start_pose_mode_no_shapekey_reset"),
     ("cats_manual", "stop_pose_mode_no_shapekey_reset"),
+    ("cats_overdraw", "download_separator"),
+    ("cats_overdraw", "help"),
     ("cats_shapekey", "shape_key_to_basis"),
     ("mmd_tools_local", "apply_additional_transform"),
     ("mmd_tools_local", "clean_additional_transform"),
@@ -28,7 +30,10 @@ EXPECTED_OPERATORS = (
     ("mmd_tools_local", "reset_object_visibility"),
     ("mmd_tools_local", "separate_by_parts"),
 )
-EXPECTED_PANEL = "VIEW3D_PT_quickaccess_v3"
+EXPECTED_PANELS = (
+    "VIEW3D_PT_quickaccess_v3",
+    "VIEW3D_PT_optimize_overdraw_v3",
+)
 EXPECTED_SCENE_PROPERTY = "remove_zero_weight"
 EXPECTED_MMD_PREFERENCES = (
     "shared_toon_folder",
@@ -93,7 +98,9 @@ class ExtensionEnabledTests(unittest.TestCase):
                 self.assertIsNotNone(operator_rna(namespace, name))
 
     def test_expected_panel_and_scene_property_are_registered(self):
-        self.assertIsNotNone(getattr(bpy.types, EXPECTED_PANEL, None))
+        for panel in EXPECTED_PANELS:
+            with self.subTest(panel=panel):
+                self.assertIsNotNone(getattr(bpy.types, panel, None))
         self.assertIsNotNone(bpy.types.Scene.bl_rna.properties.get(EXPECTED_SCENE_PROPERTY))
 
     def test_bundled_mmd_preferences_are_exposed_through_cats(self):
@@ -129,7 +136,9 @@ class ExtensionAbsentTests(unittest.TestCase):
         for namespace, name in EXPECTED_OPERATORS:
             with self.subTest(operator=f"{namespace}.{name}"):
                 self.assertIsNone(operator_rna(namespace, name))
-        self.assertIsNone(getattr(bpy.types, EXPECTED_PANEL, None))
+        for panel in EXPECTED_PANELS:
+            with self.subTest(panel=panel):
+                self.assertIsNone(getattr(bpy.types, panel, None))
         self.assertIsNone(bpy.types.Scene.bl_rna.properties.get(EXPECTED_SCENE_PROPERTY))
 
 

@@ -15,6 +15,7 @@ if "bpy" not in locals():
     from . import eyetracking
     from . import importer
     from . import material
+    from . import overdraw
     from . import rootbone
     from . import settings
     from . import scale
@@ -38,6 +39,7 @@ else:
     importlib.reload(eyetracking)
     importlib.reload(importer)
     importlib.reload(material)
+    importlib.reload(overdraw)
     importlib.reload(rootbone)
     importlib.reload(settings)
     importlib.reload(scale)

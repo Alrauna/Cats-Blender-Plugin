@@ -113,6 +113,11 @@ jobs:
           $BLENDER_BIN --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/pose_mode_smoke.py
 
+      - name: Exercise Overdraw Prevention helpers
+        run: >-
+          $BLENDER_BIN --background --offline-mode -noaudio
+          --python-exit-code 1 --python tests/overdraw_smoke.py
+
       - name: Import every installed Python module
         run: >-
           $BLENDER_BIN --background --offline-mode -noaudio

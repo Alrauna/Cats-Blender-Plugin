@@ -41,6 +41,12 @@ Some features need additional add-ons:
   [Alrauna/material-combiner-addon](https://github.com/Alrauna/material-combiner-addon)
 - **Immersive Scaler**, for scaling tools:
   [Alrauna/immersive_scaler](https://github.com/Alrauna/immersive_scaler)
+- **Alpha Material Separator** 1.3.0 or newer, for Overdraw Prevention:
+  [Alrauna/blender-alpha-material-separator](https://github.com/Alrauna/blender-alpha-material-separator)
+
+  Overdraw Prevention reads the separator's published workflow state to decide when
+  Preview and Apply are available. An older separator does not publish it, so the panel
+  reports the requirement and offers the download button instead of the workflow.
 
 ## Install
 

@@ -1,6 +1,6 @@
 # MIT License
 
-CATS_VERSION = "5.2.0-alpha.1"
+CATS_VERSION = "5.2.1"
 MIN_BLENDER_VERSION = (5, 2, 0)
 dev_branch = False
 

@@ -1,6 +1,6 @@
 # Handoff
 
-Branches `main` and `blender-52`, version `5.2.0-alpha.1`.
+Branches `main` and `blender-52`, version `5.2.1`.
 
 ## State
 
@@ -70,10 +70,93 @@ branch tips no release tag reached: `Welcome`, `blender-36-dev`, `blender-40`,
 `blender-43-dev`, and `blender-44-dev`. Every deleted tip was confirmed reachable
 from a tag before deletion. To recover one, branch from its tag.
 
+## Overdraw Prevention
+
+Branch `feature/overdraw-prevention` is complete and ready for review at `fd90759`,
+14 commits ahead of `main` and unpushed. Its objective — the Overdraw Prevention
+panel and the workflow gating that makes it mirror the separator — is met, the full
+change gate passes, and the maintainer has confirmed the panel in the GUI.
+
+Branch `feature/separator-version-gate` is stacked on it, with the maintainer's
+explicit approval for the stacked workflow. It enforces the separator 1.3.0 floor
+and releases CATS as `5.2.1`. Both branches are unpushed; `feature/overdraw-prevention`
+merges onto `main` first, then this branch rebases onto the updated `main`.
+
+`ui/optimization.py` gained an **Overdraw Prevention** sub-panel between Atlas and
+Material. It drives the external Blender Alpha Material Separator extension —
+`Alrauna/blender-alpha-material-separator`, id `alpha_material_separator` — through
+its four published workflow operators, and offers a download button when the
+separator is absent.
+
+`tools/overdraw.py` holds the integration. Nothing imports separator code:
+detection is `hasattr` on `bpy.ops.alpha_material_separator` plus the
+`WindowManager.alpha_material_separator_api` property, because the separator is an
+extension whose module path varies with the repository it was installed from. This
+is deliberately not the `addon_utils` name scan the Material Combiner integration
+uses. Status text is the separator's own `message` field; CATS never composes it.
+
+`configure_analysis()` copies seven `analyze` operator properties from the
+separator's public settings, plus the override payload, because `analyze` reads its
+own RNA and never consults those settings itself. `api_major = 1` is the version
+handshake; the separator refuses a mismatch.
+
+Registered CATS classes are 138: 135 before this work, plus two `cats_overdraw`
+operators and one panel.
+
+### Requires Alpha Material Separator 1.3.0 or newer
+
+Separator 1.3.0 publishes `workflow_json` on
+`WindowManager.alpha_material_separator_api` — a computed `get=` property carrying the
+same workflow snapshot the separator's own panel draws from. `Overdraw.workflow_state()`
+reads it, and the panel draws Preview when `can_preview`, Apply when `can_apply`, and
+Clear when `analysis_id` is set. Because the separator computes that snapshot once for
+both surfaces, CATS's gating cannot drift from what the separator will accept.
+
+1.3.0 also publishes `severity` in every status payload, so CATS no longer keeps its own
+list of which status codes are serious. `Overdraw.status_severity()` reads it and
+defaults to `OK` when absent.
+
+A stale result is raised to an error box even though the separator files `RESULT_STALE`
+as `INFO`. The separator can afford `INFO` because its own panel reddens the step it
+blocks; CATS has no equivalent step, so the status line carries the severity instead.
+
+`RECHECK_PENDING` is deliberately not treated as stale. The separator raises it from
+depsgraph notifications, which Blender also emits for harmless selection and mode
+changes, and resolves it on the next action. Treating it as staleness would blank the
+panel on a mode switch.
+
+An installed separator that publishes an API older than 1.3 is refused:
+`Overdraw.meets_minimum_api()` compares the published `api_version` against
+`SEPARATOR_MINIMUM_API`, and the panel draws the requirement and the download button
+instead of the workflow. An unreadable version counts as too old, which only an older
+separator produces. This replaces the earlier silent fallback, which was only there
+because the separator's release version could not be told apart from its API version
+before 1.3.0.
+
 ## Outstanding
 
 - No interactive coverage exists for import/export, file browser, or material
   preview workflows. Background tests cannot substitute for these.
+- Overdraw Prevention is verified in background mode against separator 1.3.0 by
+  `tests/overdraw_workflow_probe.py`: gating is off before analysis, open after it,
+  closed by a settings change, and correctly left open by a mesh edit. That file skips
+  itself when the separator is absent, so CI can run it in the CATS-only profile
+  without installing the separator. The maintainer confirmed the same four cases in
+  the GUI on 2026-08-08 against
+  `cats_blender_plugin-5.2.0-alpha.1-b01aa8e.zip`, which also settles panel repaint
+  on a separator state change. Still unverified and GUI-only: the download
+  confirmation dialog.
+- CATS no longer reads any separator status code by value; severity and gating both come
+  from published fields. The seven mirrored `analyze` property names are guarded upstream
+  as `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into a
+  refusal rather than a wrong result.
+- The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review,
+  including the two new keys `OptimizePanel.overdrawOutdated1` and
+  `OptimizePanel.overdrawOutdated2`.
+- The blocked path has no automated coverage against a genuinely old separator. The
+  `1.2.0`-named archive in `.local-references/` is 1.3 code with a 1.2.0 manifest, so it
+  reports `api_version 1.3` and passes the gate. `tests/overdraw_smoke.py` covers the
+  decision logic with stubs; the drawn result on a real pre-1.3 separator is GUI-only.
 - The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
   review. The maintainer name was left untranslated inside each sentence.
 - The credits panel's Help button and three in-app wiki links point at the
