@@ -1,78 +1,85 @@
 name: Blender 5.2 validation
 
 on:
-  push:
-    branches: [main, dev, forked_dev, blender-52]
   pull_request:
-    branches: [main, dev, forked_dev, blender-52]
-  schedule:
-    - cron: "0 4 * * 1"
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      release:
+        description: Publish final X.Y.Z release; leave empty for validation only
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
   group: cats-blender-5-2-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  BLENDER_VERSION: "5.2.0"
-  BLENDER_RELEASE_SERIES: "5.2"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  validate-build-test:
-    name: Validate, package, install, and test
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  validate:
+    name: Validate, package, install, and test (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            platform: windows
+          - runner: ubuntu-24.04
+            platform: linux
+          - runner: macos-15
+            platform: macos
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up host Python
-        uses: actions/setup-python@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          python-version: "3.13"
+          persist-credentials: false
+
+      - name: Verify and extract Blender 5.2.0
+        id: blender
+        run: >-
+          python scripts/ci.py prepare-blender
+          --platform '${{ matrix.platform }}'
+          --output-dir '${{ runner.temp }}/blender-5.2.0'
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Check Python syntax
-        run: python -W ignore::SyntaxWarning -m compileall -q -f .
-
-      - name: Download Blender 5.2 LTS
-        shell: bash
-        run: |
-          set -euo pipefail
-          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
-          url="https://download.blender.org/release/Blender${BLENDER_RELEASE_SERIES}/${archive}"
-          curl --fail --location --retry 3 --retry-all-errors --output "${RUNNER_TEMP}/${archive}" "${url}"
-          tar -xf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}"
-          blender_bin="${RUNNER_TEMP}/blender-${BLENDER_VERSION}-linux-x64/blender"
-          test -x "${blender_bin}"
-          echo "BLENDER_BIN=${blender_bin}" >> "${GITHUB_ENV}"
-
-      - name: Verify Blender version
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(${BLENDER_BIN} --version | head -n 1)"
-          echo "${version}"
-          [[ "${version}" == "Blender ${BLENDER_RELEASE_SERIES}"* ]]
+        run: >-
+          '${{ steps.blender.outputs.python }}'
+          -W ignore::SyntaxWarning -m compileall -q -f
+          __init__.py globs.py extentions.py updater.py
+          tools ui extern_tools tests
 
       - name: Validate extension source
-        run: $BLENDER_BIN --command extension validate .
+        run: >-
+          '${{ steps.blender.outputs.blender }}'
+          --command extension validate .
 
       - name: Build and validate extension package
-        shell: bash
         run: |
           set -euo pipefail
-          package_path="${RUNNER_TEMP}/cats_blender_plugin.zip"
-          "${BLENDER_BIN}" --command extension build --source-dir . --output-filepath "${package_path}"
-          "${BLENDER_BIN}" --command extension validate "${package_path}"
-          python tests/verify_package.py "${package_path}" --source-dir .
+          package_path='${{ runner.temp }}/cats_blender_plugin.zip'
+          '${{ steps.blender.outputs.blender }}' \
+            --command extension build \
+            --source-dir . \
+            --output-filepath "${package_path}"
+          '${{ steps.blender.outputs.blender }}' \
+            --command extension validate "${package_path}"
+          '${{ steps.blender.outputs.python }}' \
+            tests/verify_package.py "${package_path}" --source-dir .
           echo "PACKAGE_PATH=${package_path}" >> "${GITHUB_ENV}"
 
       - name: Create isolated extension repository
-        shell: bash
         run: |
           set -euo pipefail
           export BLENDER_USER_RESOURCES="${RUNNER_TEMP}/blender-user/resources"
@@ -85,76 +92,95 @@ jobs:
           echo "BLENDER_USER_SCRIPTS=${BLENDER_USER_SCRIPTS}" >> "${GITHUB_ENV}"
           echo "BLENDER_USER_EXTENSIONS=${BLENDER_USER_EXTENSIONS}" >> "${GITHUB_ENV}"
           echo "BLENDER_USER_DATAFILES=${BLENDER_USER_DATAFILES}" >> "${GITHUB_ENV}"
-          mkdir -p "${BLENDER_USER_RESOURCES}" "${BLENDER_USER_CONFIG}" \
-            "${BLENDER_USER_SCRIPTS}" "${BLENDER_USER_EXTENSIONS}" "${BLENDER_USER_DATAFILES}"
-          mkdir -p "${RUNNER_TEMP}/blender-extensions"
-          "${BLENDER_BIN}" --command extension repo-add \
+          mkdir -p \
+            "${BLENDER_USER_RESOURCES}" \
+            "${BLENDER_USER_CONFIG}" \
+            "${BLENDER_USER_SCRIPTS}" \
+            "${BLENDER_USER_EXTENSIONS}" \
+            "${BLENDER_USER_DATAFILES}" \
+            "${RUNNER_TEMP}/blender-extensions"
+          '${{ steps.blender.outputs.blender }}' \
+            --command extension repo-add \
             --name "CATS CI" \
             --directory "${RUNNER_TEMP}/blender-extensions" \
             --clear-all \
             cats_ci
 
       - name: Install and enable built extension
-        run: $BLENDER_BIN --command extension install-file --repo cats_ci --enable "$PACKAGE_PATH"
+        run: >-
+          '${{ steps.blender.outputs.blender }}'
+          --command extension install-file
+          --repo cats_ci --enable "$PACKAGE_PATH"
 
       - name: Verify installed extension registration
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/extension_smoke.py
           -- --expect-enabled
 
       - name: Exercise Blender 5.2 API compatibility surfaces
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/blender_52_api_smoke.py
 
       - name: Exercise Pose Mode reset controls
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/pose_mode_smoke.py
 
       - name: Exercise Overdraw Prevention helpers
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/overdraw_smoke.py
 
       - name: Import every installed Python module
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/import_sweep.py
 
       - name: Stress extension registration lifecycle
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/lifecycle_stress.py
 
       - name: Run armature tests
         run: >-
-          python tests/run.py --blend "$BLENDER_BIN"
-          --test "./tests/armatures/*"
-          --bfile "./tests/armatures/armature.*"
+          '${{ steps.blender.outputs.python }}' tests/run.py
+          --blend '${{ steps.blender.outputs.blender }}'
+          --test './tests/armatures/*'
+          --bfile './tests/armatures/armature.*'
           --ci
 
       - name: Run shape-key tests
         run: >-
-          python tests/run.py --blend "$BLENDER_BIN"
-          --test "./tests/shapekeys/shape_key_to_basis"
-          --bfile "./tests/shapekeys/shapekey.shape_key_to_basis"
+          '${{ steps.blender.outputs.python }}' tests/run.py
+          --blend '${{ steps.blender.outputs.blender }}'
+          --test './tests/shapekeys/shape_key_to_basis'
+          --bfile './tests/shapekeys/shapekey.shape_key_to_basis'
           --ci
 
       - name: Remove extension
-        run: $BLENDER_BIN --command extension remove cats_blender_plugin
+        run: >-
+          '${{ steps.blender.outputs.blender }}'
+          --command extension remove cats_blender_plugin
 
       - name: Verify extension removal
         run: >-
-          $BLENDER_BIN --background --offline-mode -noaudio
+          '${{ steps.blender.outputs.blender }}'
+          --background --offline-mode -noaudio
           --python-exit-code 1 --python tests/extension_smoke.py
           -- --expect-absent
 
       - name: Upload tested package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: cats-blender-plugin-${{ env.BLENDER_VERSION }}
+          name: cats-blender-plugin-${{ matrix.platform }}-5.2.0
           path: ${{ runner.temp }}/cats_blender_plugin.zip
           if-no-files-found: error
           retention-days: 7

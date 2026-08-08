@@ -140,6 +140,48 @@ class BlenderAcquisitionTests(unittest.TestCase):
             self.ci.require_blender_version("Blender 5.2.1")
 
 
+class WorkflowPolicyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (
+            REPOSITORY_DIR / ".github" / "workflows" / "Cats Tests.yml"
+        ).read_text(encoding="utf-8")
+
+    def test_actions_are_immutable_and_checkout_drops_credentials(self):
+        import re
+
+        refs = re.findall(
+            r"^\s*uses:\s*[^@\s]+@([^\s]+)$", self.workflow, re.MULTILINE
+        )
+        self.assertTrue(refs)
+        self.assertTrue(
+            all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in refs)
+        )
+        self.assertIn("persist-credentials: false", self.workflow)
+
+    def test_matrix_and_trigger_policy(self):
+        for value in ("windows-2025", "ubuntu-24.04", "macos-15"):
+            self.assertIn(value, self.workflow)
+        self.assertNotIn("schedule:", self.workflow)
+        self.assertNotIn("forked_dev", self.workflow)
+        self.assertNotIn("actions/setup-python", self.workflow)
+        self.assertIn("permissions:\n  contents: read", self.workflow)
+
+    def test_explicit_compile_paths_replace_repository_dot(self):
+        self.assertNotIn("compileall -q -f .", self.workflow)
+        for path in (
+            "__init__.py",
+            "globs.py",
+            "extentions.py",
+            "updater.py",
+            "tools",
+            "ui",
+            "extern_tools",
+            "tests",
+        ):
+            self.assertIn(path, self.workflow)
+
+
 class FixtureSecurityTests(unittest.TestCase):
     def test_canonical_asset_hashes_are_committed(self):
         self.assertEqual(
