@@ -88,5 +88,54 @@ class CiPrimitiveTests(unittest.TestCase):
                 self.ci.require_file_sha256(path, "short")
 
 
+class BlenderAcquisitionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ci = load_ci_module()
+
+    def test_every_supported_platform_has_the_approved_archive_digest(self):
+        expected = {
+            "windows": (
+                "blender-5.2.0-windows-x64.zip",
+                "2d184b626c001692c362291911293b6a297179d618d95e9e9192c3a80318adc4",
+            ),
+            "linux": (
+                "blender-5.2.0-linux-x64.tar.xz",
+                "96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48",
+            ),
+            "macos": (
+                "blender-5.2.0-macos-arm64.dmg",
+                "ed4d8390166dec5ea0a2813a03db6221f206ce016442be7f59f41d760972568a",
+            ),
+        }
+        self.assertEqual(
+            expected,
+            {
+                key: (value["filename"], value["sha256"])
+                for key, value in self.ci.PLATFORMS.items()
+            },
+        )
+
+    def test_curl_requires_https_and_one_resolution_strategy(self):
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            self.ci.curl_command("http://example.test/file", Path("file"))
+        with self.assertRaisesRegex(ValueError, "choose"):
+            self.ci.curl_command(
+                "https://example.test/file",
+                Path("file"),
+                "https://resolver.test/dns-query",
+                ("192.0.2.1",),
+            )
+
+    def test_dns_parser_rejects_truncated_message(self):
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            self.ci._parse_dns_a_response(b"short", 1, b"question")
+
+    def test_blender_version_is_exact(self):
+        self.ci.require_blender_version("Blender 5.2.0 LTS")
+        with self.assertRaisesRegex(ValueError, "unexpected"):
+            self.ci.require_blender_version("Blender 5.2.1")
+
+
 if __name__ == "__main__":
     unittest.main()
