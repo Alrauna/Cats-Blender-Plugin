@@ -106,6 +106,40 @@ def workflow_state(api_state):
     return payload if isinstance(payload, dict) else None
 
 
+# The separator publishes this in every payload. 1.3 is the first API that
+# publishes workflow state, which is what the panel's gating is built on.
+SEPARATOR_MINIMUM_API = (1, 3)
+
+
+def api_version(api_state):
+    """Return the separator's published API major and minor, or None.
+
+    Every published payload carries it, so the workflow channel is read first
+    and the status channel second. A patch component is ignored: the separator
+    versions its contract by major and minor only.
+    """
+    for payload in (workflow_state(api_state), read_status(api_state)):
+        raw = payload.get("api_version") if payload else None
+        if not isinstance(raw, str) or not raw:
+            continue
+        try:
+            return tuple(int(part) for part in raw.split(".")[:2])
+        except ValueError:
+            return None
+    return None
+
+
+def meets_minimum_api(api_state):
+    """Return True when the installed separator is new enough to drive.
+
+    An unreadable version is treated as too old. Only a separator older than
+    1.3.0 reaches that state: 1.3.0 and newer publish workflow_json from a
+    computed property that is always current.
+    """
+    version = api_version(api_state)
+    return version is not None and version >= SEPARATOR_MINIMUM_API
+
+
 def overrides_json(settings):
     """Build the separator's per-material override payload."""
     payload = []

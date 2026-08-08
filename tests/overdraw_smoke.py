@@ -140,6 +140,44 @@ class OverdrawHelperTests(unittest.TestCase):
         raw = json.dumps({"code": "ANALYSIS_COMPLETE", "message": "m"})
         self.assertEqual("OK", self.overdraw.status_severity(StubApiState(raw)))
 
+    def test_api_version_reads_the_workflow_channel_first(self):
+        state = StubApiState(
+            json.dumps({"code": "OK", "message": "m", "api_version": "1.2"}),
+            workflow_json=json.dumps({"api_version": "1.3", "stale": False}),
+        )
+        self.assertEqual((1, 3), self.overdraw.api_version(state))
+
+    def test_api_version_falls_back_to_the_status_channel(self):
+        raw = json.dumps({"code": "OK", "message": "m", "api_version": "1.2"})
+        self.assertEqual((1, 2), self.overdraw.api_version(StubApiState(raw)))
+
+    def test_api_version_returns_none_when_nothing_reports_one(self):
+        self.assertIsNone(self.overdraw.api_version(StubApiState()))
+        self.assertIsNone(self.overdraw.api_version(None))
+        for raw in ('{"api_version": ""}', '{"api_version": "x.y"}',
+                    '{"api_version": 13}', '{"code": "OK"}'):
+            with self.subTest(raw=raw):
+                self.assertIsNone(self.overdraw.api_version(StubApiState(raw)))
+
+    def test_api_version_ignores_a_patch_component(self):
+        raw = json.dumps({"code": "OK", "api_version": "1.3.4"})
+        self.assertEqual((1, 3), self.overdraw.api_version(StubApiState(raw)))
+
+    def test_meets_minimum_api_accepts_the_minimum_and_newer(self):
+        for reported in ("1.3", "1.4", "2.0"):
+            with self.subTest(reported=reported):
+                raw = json.dumps({"api_version": reported, "stale": False})
+                self.assertTrue(
+                    self.overdraw.meets_minimum_api(StubApiState(workflow_json=raw))
+                )
+
+    def test_meets_minimum_api_rejects_older_and_unknown(self):
+        raw = json.dumps({"code": "OK", "api_version": "1.2"})
+        self.assertFalse(self.overdraw.meets_minimum_api(StubApiState(raw)))
+        # An older separator publishes no workflow state and may not have
+        # published a status yet either; that is not proof of a new enough build.
+        self.assertFalse(self.overdraw.meets_minimum_api(StubApiState()))
+
     def test_overrides_json_defaults_to_empty_list(self):
         self.assertEqual("[]", self.overdraw.overrides_json(None))
         self.assertEqual("[]", self.overdraw.overrides_json(StubSettings()))
