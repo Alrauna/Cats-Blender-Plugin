@@ -323,9 +323,20 @@ class OverdrawSubPanel(ToolPanel, bpy.types.Panel):
 
             window_manager = context.window_manager
             api_state = getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
+            workflow = Overdraw.workflow_state(api_state)
+            # No published workflow means a separator older than 1.3.0. Draw every
+            # button, which is what CATS did before the separator published gating.
+            stale = bool(workflow.get('stale')) if workflow else False
+            show_preview = workflow.get('can_preview', True) if workflow else True
+            show_apply = workflow.get('can_apply', True) if workflow else True
+            show_clear = bool(workflow.get('analysis_id')) if workflow else True
+
             message = Overdraw.status_message(api_state)
             if message:
-                if Overdraw.status_is_actionable(api_state):
+                # The separator files RESULT_STALE as INFO because its own panel
+                # signals staleness in the step it blocks, not in the status line.
+                # CATS has no such step, so a stale result is raised to an error box.
+                if stale or Overdraw.status_severity(api_state) == 'ERROR':
                     draw_error_box(col, [message])
                 else:
                     status_col = col.box().column(align=True)
@@ -345,25 +356,27 @@ class OverdrawSubPanel(ToolPanel, bpy.types.Panel):
                 ),
                 settings,
             )
-            actions.operator(
-                'alpha_material_separator.select_faces',
-                text=t('OptimizePanel.overdrawPreview'),
-                icon='RESTRICT_SELECT_OFF',
-            )
-            actions.operator(
-                'alpha_material_separator.assign_materials',
-                text=t('OptimizePanel.overdrawApply'),
-                icon='MATERIAL',
-            )
+            if show_preview:
+                actions.operator(
+                    'alpha_material_separator.select_faces',
+                    text=t('OptimizePanel.overdrawPreview'),
+                    icon='RESTRICT_SELECT_OFF',
+                )
+            if show_apply:
+                actions.operator(
+                    'alpha_material_separator.assign_materials',
+                    text=t('OptimizePanel.overdrawApply'),
+                    icon='MATERIAL',
+                )
 
-            col.separator()
-
-            clear = col.column(align=True)
-            clear.operator(
-                'alpha_material_separator.clear_results',
-                text=t('OptimizePanel.overdrawClear'),
-                icon='X',
-            )
+            if show_clear:
+                col.separator()
+                clear = col.column(align=True)
+                clear.operator(
+                    'alpha_material_separator.clear_results',
+                    text=t('OptimizePanel.overdrawClear'),
+                    icon='X',
+                )
 
             col.separator()
 
