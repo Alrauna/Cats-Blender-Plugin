@@ -72,6 +72,13 @@ from a tag before deletion. To recover one, branch from its tag.
 
 ## Overdraw Prevention
 
+Branch `feature/overdraw-prevention` is complete and ready for review at `cbf8a9c`,
+14 commits ahead of `main` and unpushed. Its objective — the Overdraw Prevention
+panel and the workflow gating that makes it mirror the separator — is met, the full
+change gate passes, and the maintainer has confirmed the panel in the GUI. The
+recommended next action is a pull request onto `main`; nothing further belongs on
+this branch.
+
 `ui/optimization.py` gained an **Overdraw Prevention** sub-panel between Atlas and
 Material. It drives the external Blender Alpha Material Separator extension —
 `Alrauna/blender-alpha-material-separator`, id `alpha_material_separator` — through
@@ -129,8 +136,11 @@ releases.
   `tests/overdraw_workflow_probe.py`: gating is off before analysis, open after it,
   closed by a settings change, and correctly left open by a mesh edit. That file skips
   itself when the separator is absent, so CI can run it in the CATS-only profile
-  without installing the separator. Still unverified and GUI-only: panel repaint on a
-  separator state change, and the download confirmation dialog.
+  without installing the separator. The maintainer confirmed the same four cases in
+  the GUI on 2026-08-08 against
+  `cats_blender_plugin-5.2.0-alpha.1-b01aa8e.zip`, which also settles panel repaint
+  on a separator state change. Still unverified and GUI-only: the download
+  confirmation dialog.
 - CATS no longer reads any separator status code by value; severity and gating both come
   from published fields. The seven mirrored `analyze` property names are guarded upstream
   as `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into a
