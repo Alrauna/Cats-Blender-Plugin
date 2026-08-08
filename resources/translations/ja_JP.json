@@ -860,6 +860,8 @@
         "OptimizePanel.overdrawAuthor": "Alpha Material Separator を使用",
         "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator がインストールされていません。",
         "OptimizePanel.overdrawNotInstalled2": "使用するにはインストールしてください。",
+        "OptimizePanel.overdrawOutdated1": "Alpha Material Separator 1.3.0 以降が必要です。",
+        "OptimizePanel.overdrawOutdated2": "使用するにはセパレーターを更新してください。",
         "OptimizePanel.overdrawAnalyze": "選択メッシュを解析",
         "OptimizePanel.overdrawPreview": "移動する面をプレビュー",
         "OptimizePanel.overdrawApply": "マテリアル分離を適用",

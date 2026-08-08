@@ -825,6 +825,8 @@
         "OptimizePanel.overdrawAuthor": "使用 Alpha Material Separator",
         "OptimizePanel.overdrawNotInstalled1": "未安装 Alpha Material Separator。",
         "OptimizePanel.overdrawNotInstalled2": "请安装后再使用过度绘制优化。",
+        "OptimizePanel.overdrawOutdated1": "需要 Alpha Material Separator 1.3.0 或更高版本。",
+        "OptimizePanel.overdrawOutdated2": "请更新分离器后再使用过度绘制优化。",
         "OptimizePanel.overdrawAnalyze": "分析所选网格",
         "OptimizePanel.overdrawPreview": "预览待移动的面",
         "OptimizePanel.overdrawApply": "应用材质分离",

@@ -310,26 +310,37 @@ class OverdrawSubPanel(ToolPanel, bpy.types.Panel):
 
             col.separator()
 
+            window_manager = context.window_manager
+            api_state = getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
+
             if not Overdraw.is_available():
-                draw_error_box(col, [
+                missing = [
                     t('OptimizePanel.overdrawNotInstalled1'),
                     t('OptimizePanel.overdrawNotInstalled2'),
-                ])
+                ]
+            elif not Overdraw.meets_minimum_api(api_state):
+                missing = [
+                    t('OptimizePanel.overdrawOutdated1'),
+                    t('OptimizePanel.overdrawOutdated2'),
+                ]
+            else:
+                missing = None
+
+            if missing:
+                draw_error_box(col, missing)
                 col.separator()
                 row = col.row(align=True)
                 row.scale_y = 1.3
                 row.operator(Overdraw.DownloadSeparatorButton.bl_idname, icon=globs.ICON_URL)
                 return
 
-            window_manager = context.window_manager
-            api_state = getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
+            # Past the gate the separator is 1.3.0 or newer, so it always
+            # publishes workflow state and every step is gated on it.
             workflow = Overdraw.workflow_state(api_state)
-            # No published workflow means a separator older than 1.3.0. Draw every
-            # button, which is what CATS did before the separator published gating.
-            stale = bool(workflow.get('stale')) if workflow else False
-            show_preview = workflow.get('can_preview', True) if workflow else True
-            show_apply = workflow.get('can_apply', True) if workflow else True
-            show_clear = bool(workflow.get('analysis_id')) if workflow else True
+            stale = bool(workflow.get('stale'))
+            show_preview = bool(workflow.get('can_preview'))
+            show_apply = bool(workflow.get('can_apply'))
+            show_clear = bool(workflow.get('analysis_id'))
 
             message = Overdraw.status_message(api_state)
             if message:

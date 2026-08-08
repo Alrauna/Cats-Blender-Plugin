@@ -867,6 +867,8 @@
         "OptimizePanel.overdrawAuthor": "Uses Alpha Material Separator",
         "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator is not installed.",
         "OptimizePanel.overdrawNotInstalled2": "Install it to use Overdraw Prevention.",
+        "OptimizePanel.overdrawOutdated1": "Alpha Material Separator 1.3.0 or newer is required.",
+        "OptimizePanel.overdrawOutdated2": "Update the separator to use Overdraw Prevention.",
         "OptimizePanel.overdrawAnalyze": "Analyze Selected Meshes",
         "OptimizePanel.overdrawPreview": "Preview Faces to Move",
         "OptimizePanel.overdrawApply": "Apply Material Separation",

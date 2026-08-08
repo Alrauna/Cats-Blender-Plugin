@@ -134,6 +134,10 @@ class OverdrawWorkflowGatingTests(unittest.TestCase):
         )
         return state
 
+    def test_the_installed_separator_meets_the_minimum_api(self):
+        self.assertEqual((1, 3), self.overdraw.api_version(self.api_state)[:2])
+        self.assertTrue(self.overdraw.meets_minimum_api(self.api_state))
+
     def test_preview_and_apply_are_gated_off_before_any_analysis(self):
         bpy.ops.alpha_material_separator.clear_results()
         view = self.view()

@@ -863,6 +863,8 @@
         "OptimizePanel.overdrawAuthor": "Alpha Material Separator 사용",
         "OptimizePanel.overdrawNotInstalled1": "Alpha Material Separator가 설치되지 않았습니다.",
         "OptimizePanel.overdrawNotInstalled2": "사용하려면 설치하세요.",
+        "OptimizePanel.overdrawOutdated1": "Alpha Material Separator 1.3.0 이상이 필요합니다.",
+        "OptimizePanel.overdrawOutdated2": "사용하려면 세퍼레이터를 업데이트하세요.",
         "OptimizePanel.overdrawAnalyze": "선택한 메시 분석",
         "OptimizePanel.overdrawPreview": "이동할 면 미리보기",
         "OptimizePanel.overdrawApply": "머티리얼 분리 적용",
