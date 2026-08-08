@@ -74,18 +74,36 @@ def status_message(api_state):
     return None
 
 
-# The separator publishes these when a completed report no longer matches the
-# scene. Its own panel treats them as normal because it draws a dedicated stale
-# box; CATS has no such box, so the status line carries the severity instead.
-ACTIONABLE_STATUS_CODES = frozenset({"RESULT_STALE", "STALE_ANALYSIS"})
+def status_severity(api_state):
+    """Return the separator's own severity for its last status.
 
-
-def status_is_actionable(api_state):
-    """Return True when the published status means the user must act."""
+    The separator publishes OK, INFO, or ERROR per status code and classifies
+    unknown codes as ERROR itself, so CATS keeps no code list of its own. A
+    separator older than 1.3.0 publishes no severity; treat that as OK, which
+    leaves its status in the plain info box exactly as before.
+    """
     payload = read_status(api_state)
     if payload is None:
-        return False
-    return payload.get("code") in ACTIONABLE_STATUS_CODES
+        return "OK"
+    severity = payload.get("severity")
+    return severity if isinstance(severity, str) and severity else "OK"
+
+
+def workflow_state(api_state):
+    """Return the separator's published workflow gating, or None.
+
+    This is the same snapshot the separator's own panel draws from, so gating
+    CATS on it cannot drift from what the separator will actually accept. It is
+    a computed property, always current, and absent before separator 1.3.0.
+    """
+    raw = getattr(api_state, "workflow_json", None)
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def overrides_json(settings):

@@ -26,8 +26,12 @@ def cats_module_name() -> str:
 
 
 class StubApiState:
-    def __init__(self, last_status_json):
+    def __init__(self, last_status_json="", workflow_json=None):
         self.last_status_json = last_status_json
+        # Set only when supplied, so the default stub reproduces a separator
+        # older than 1.3.0, which publishes no workflow state at all.
+        if workflow_json is not None:
+            self.workflow_json = workflow_json
 
 
 class StubNamed:
@@ -96,25 +100,45 @@ class OverdrawHelperTests(unittest.TestCase):
                     self.overdraw.status_message(StubApiState(json.dumps(payload)))
                 )
 
-    def test_status_is_actionable_for_stale_codes(self):
-        for code in ("RESULT_STALE", "STALE_ANALYSIS"):
-            with self.subTest(code=code):
-                raw = json.dumps({"code": code, "message": "changed"})
-                self.assertTrue(
-                    self.overdraw.status_is_actionable(StubApiState(raw))
+    def test_workflow_state_returns_the_published_payload(self):
+        payload = {
+            "api_version": "1.3",
+            "state": "READY_TO_REVIEW",
+            "can_preview": True,
+            "can_apply": True,
+            "stale": False,
+            "analysis_id": "abc123",
+        }
+        self.assertEqual(
+            payload,
+            self.overdraw.workflow_state(StubApiState(workflow_json=json.dumps(payload))),
+        )
+
+    def test_workflow_state_returns_none_for_unusable_input(self):
+        for raw in ("", "not json", "[]", "null", '"text"'):
+            with self.subTest(raw=raw):
+                self.assertIsNone(
+                    self.overdraw.workflow_state(StubApiState(workflow_json=raw))
                 )
 
-    def test_status_is_not_actionable_for_normal_codes(self):
-        for code in ("ANALYSIS_COMPLETE", "ASSIGNMENT_COMPLETE", "CLEARED"):
-            with self.subTest(code=code):
-                raw = json.dumps({"code": code, "message": "fine"})
-                self.assertFalse(
-                    self.overdraw.status_is_actionable(StubApiState(raw))
+    def test_workflow_state_returns_none_when_the_property_is_absent(self):
+        self.assertIsNone(self.overdraw.workflow_state(StubApiState()))
+        self.assertIsNone(self.overdraw.workflow_state(None))
+
+    def test_status_severity_returns_the_published_severity(self):
+        for severity in ("OK", "INFO", "ERROR"):
+            with self.subTest(severity=severity):
+                raw = json.dumps({"code": "ANY", "message": "m", "severity": severity})
+                self.assertEqual(
+                    severity, self.overdraw.status_severity(StubApiState(raw))
                 )
 
-    def test_status_is_not_actionable_without_a_payload(self):
-        self.assertFalse(self.overdraw.status_is_actionable(StubApiState("")))
-        self.assertFalse(self.overdraw.status_is_actionable(None))
+    def test_status_severity_defaults_to_ok(self):
+        self.assertEqual("OK", self.overdraw.status_severity(StubApiState("")))
+        self.assertEqual("OK", self.overdraw.status_severity(None))
+        # A separator older than 1.3.0 publishes no severity at all.
+        raw = json.dumps({"code": "ANALYSIS_COMPLETE", "message": "m"})
+        self.assertEqual("OK", self.overdraw.status_severity(StubApiState(raw)))
 
     def test_overrides_json_defaults_to_empty_list(self):
         self.assertEqual("[]", self.overdraw.overrides_json(None))
