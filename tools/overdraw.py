@@ -17,9 +17,10 @@ SEPARATOR_SETTINGS_PROPERTY = "alpha_material_separator_settings"
 SEPARATOR_API_MAJOR = 1
 
 # analyze() reads these from its own operator properties, never from the
-# separator's settings, so CATS has to copy them across. image_name, uv_map_name,
-# and image_channel are omitted on purpose: the separator's own panel leaves them
-# at the operator defaults ("", "", "ALPHA").
+# separator's settings, so CATS has to copy them across. They mirror
+# api_contract.ANALYSIS_SETTING_NAMES, which the separator guards as public API.
+# image_name, uv_map_name, and image_channel are omitted on purpose: since 1.2.0
+# they carry options={'SKIP_SAVE'} and reset to ("", "", "ALPHA") per invocation.
 TUNING_PROPERTIES = (
     "address_mode",
     "alpha_threshold",
@@ -71,6 +72,20 @@ def status_message(api_state):
     if isinstance(message, str) and message.strip():
         return message
     return None
+
+
+# The separator publishes these when a completed report no longer matches the
+# scene. Its own panel treats them as normal because it draws a dedicated stale
+# box; CATS has no such box, so the status line carries the severity instead.
+ACTIONABLE_STATUS_CODES = frozenset({"RESULT_STALE", "STALE_ANALYSIS"})
+
+
+def status_is_actionable(api_state):
+    """Return True when the published status means the user must act."""
+    payload = read_status(api_state)
+    if payload is None:
+        return False
+    return payload.get("code") in ACTIONABLE_STATUS_CODES
 
 
 def overrides_json(settings):

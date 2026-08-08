@@ -96,6 +96,26 @@ class OverdrawHelperTests(unittest.TestCase):
                     self.overdraw.status_message(StubApiState(json.dumps(payload)))
                 )
 
+    def test_status_is_actionable_for_stale_codes(self):
+        for code in ("RESULT_STALE", "STALE_ANALYSIS"):
+            with self.subTest(code=code):
+                raw = json.dumps({"code": code, "message": "changed"})
+                self.assertTrue(
+                    self.overdraw.status_is_actionable(StubApiState(raw))
+                )
+
+    def test_status_is_not_actionable_for_normal_codes(self):
+        for code in ("ANALYSIS_COMPLETE", "ASSIGNMENT_COMPLETE", "CLEARED"):
+            with self.subTest(code=code):
+                raw = json.dumps({"code": code, "message": "fine"})
+                self.assertFalse(
+                    self.overdraw.status_is_actionable(StubApiState(raw))
+                )
+
+    def test_status_is_not_actionable_without_a_payload(self):
+        self.assertFalse(self.overdraw.status_is_actionable(StubApiState("")))
+        self.assertFalse(self.overdraw.status_is_actionable(None))
+
     def test_overrides_json_defaults_to_empty_list(self):
         self.assertEqual("[]", self.overdraw.overrides_json(None))
         self.assertEqual("[]", self.overdraw.overrides_json(StubSettings()))

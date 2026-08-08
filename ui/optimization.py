@@ -322,13 +322,15 @@ class OverdrawSubPanel(ToolPanel, bpy.types.Panel):
                 return
 
             window_manager = context.window_manager
-            message = Overdraw.status_message(
-                getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
-            )
+            api_state = getattr(window_manager, Overdraw.SEPARATOR_API_PROPERTY, None)
+            message = Overdraw.status_message(api_state)
             if message:
-                status_col = col.box().column(align=True)
-                status_col.scale_y = 0.75
-                status_col.label(text=message, icon='INFO')
+                if Overdraw.status_is_actionable(api_state):
+                    draw_error_box(col, [message])
+                else:
+                    status_col = col.box().column(align=True)
+                    status_col.scale_y = 0.75
+                    status_col.label(text=message, icon='INFO')
                 col.separator()
 
             settings = getattr(window_manager, Overdraw.SEPARATOR_SETTINGS_PROPERTY, None)
