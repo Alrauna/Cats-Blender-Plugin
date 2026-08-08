@@ -1,200 +1,86 @@
 # Handoff
 
-Branches `main` and `blender-52`, version `5.2.1`.
+## Repository state
 
-## State
+- Default/base branch: `main` at `b4e36f7` (PR #1 merged).
+- Active topic branch: `codex/ci-hardening-release` at `dc39c4d`, based on
+  `main` commit `b4e36f7`.
+- `blender-52` remains an older branch at `c1d020f`; it is not the default and
+  is not expected to track `main`.
+- Manifest version: final `5.2.1`; Blender target: `5.2.0 LTS`.
+- The working tree was clean after the implementation commits. Generated test
+  profiles and packages remain ignored under `.test-runtime/` and
+  `.packaged-releases/`.
 
-The Blender 5.2 port is functionally complete. `tools/` and `ui/` carry the same
-module set as the 5.0.3.1 reference archive, so no feature was dropped in the
-migration. Version wiring is consistent: `blender_manifest.toml`, `CATS_VERSION`
-in `__init__.py`, and the value `updater.py` imports all agree. The automatic
-updater remains intentionally disabled — `UPDATE_REPOSITORY` is empty and gated
-by `_update_source_configured`.
+## CI hardening branch
 
-The shape-key-preserving Pose Mode controls
-(`cats_manual.start/stop_pose_mode_no_shapekey_reset`) are complete, covered by
-`tests/pose_mode_smoke.py`, and the maintainer has confirmed them by manual GUI
-testing.
+Objective: secure CI inputs, retain the existing CATS validation gates on
+Windows, Linux, and macOS Apple Silicon, remove unreachable CI-only files, and
+add manual checksum-verified publication for final releases only.
 
-## Verified on 2026-08-06 (Blender 5.2.0 LTS, build 2026-07-14)
+Completed commits:
 
-Full CI-equivalent run at commit `4e9e7b5`, in an isolated profile, all passing:
-source and package validation, `verify_package.py`, install/enable, the five
-background smoke suites, the 13 armature invocations, the shape-key suite, and
-removal with `--expect-absent`. The package that run exercised was
-`cats_blender_plugin-5.2.0-alpha.1-4e9e7b5.zip`, SHA-256
-`a303b101878522c2b82a633a880a2e5410b8493b578014190a6bc295c37f2c21`.
+- `63d6e3e` — strict checksum, GitHub-output, and release-identity primitives.
+- `d1f0da7` — verified Blender acquisition with committed archive hashes and
+  byte-identical checksum manifests fetched through normal DNS, Cloudflare DoH,
+  and Quad9 DoT.
+- `2d6da12` — SHA-256-pinned, size-bounded Blender fixtures and
+  `--disable-autoexec` for fixture execution.
+- `2ebda43` — immutable three-platform validation workflow on `windows-2025`,
+  `ubuntu-24.04`, and `macos-15`; no scheduled trigger or `setup-python`.
+- `20a27a2` — optional manual release input, exact final `X.Y.Z` gate, fresh
+  public-source build, draft upload, `SHA256SUMS.txt`, stored-ZIP download and
+  digest verification, then publication.
+- `dc39c4d` — removal of unreferenced `tests/termcolor.py` and three obsolete
+  `tests/old/` probes.
 
-Leave builds in `.packaged-releases/` alone. They are the maintainer's to keep or
-discard, and are removed only when the maintainer asks. Do not delete a build
-after validating it.
+The workflow keeps global `contents: read`; only the release job receives
+`contents: write` and the `release` environment. Every action reference is a
+full commit SHA and checkout persistence is disabled. Release publication is
+manual, public-`main` only, requires a separate full validation matrix, rejects
+prereleases, and leaves failed drafts available for inspection. There is no
+weekly schedule, automatic release, prerelease, dry-run job, cache, linter,
+reusable workflow, or split-platform package.
 
-A recorded SHA-256 will not reproduce byte-for-byte on a rebuild, since ZIP
-member timestamps vary between builds.
+## Local verification on 2026-08-08
 
-The three test-asset URLs in `tests/run.py` were confirmed live. Two of the
-three assets are gzip-compressed blend files, which `read_blender_file_magic`
-already handles.
+All local Blender commands used isolated profiles under `.test-runtime/`.
 
-## Repository rework — complete
+- `python -m unittest tests.test_ci -v`: 20 passed.
+- Explicit-path `compileall` over `__init__.py`, `globs.py`, `extentions.py`,
+  `updater.py`, `tools`, `ui`, `extern_tools`, and `tests`: passed.
+- Blender 5.2.0 LTS source validation with `--factory-startup`: passed.
+- `python scripts/build.py --blend <Blender 5.2>`: source validation, build,
+  ZIP validation, and `tests/verify_package.py` passed from clean commit
+  `dc39c4d`.
+- Package:
+  `.packaged-releases/cats_blender_plugin-5.2.1-dc39c4d.zip`.
+- Package SHA-256:
+  `8e10b90dd3465ee06087097597676b5844a1e126f63d3b83bb3f2e07af47fd09`.
+- Package inspection: 183 members, 129 Python modules, and no repository-only,
+  local-reference, runtime-profile, cache, Git, test, docs, or scripts content.
+- The package verifier recorded 1,666 legacy invalid-escape `SyntaxWarning`s;
+  these pre-existing warnings are not package-validation errors.
+- Inline correctness/security review found no Critical or Important issue.
 
-The fork now presents as Alrauna's, not as a continuation of Team Neoneko's
-archived project.
+## Pending and limitations
 
-The README is a landing page that credits the lineage: Absolute Quantum with
-Hotox and GiveMeAllYourCats created Cats, Team Neoneko with Yusarina carried it
-to 5.0, and this work starts from their release. 989onan is credited as a
-contributor, not a Neoneko maintainer; only one upstream string claimed otherwise
-and the commit record contradicts it. The archived upstream wiki is labelled
-historical, and remains the only feature documentation that exists.
+- The workflow has not been parsed or run by GitHub yet. No local `actionlint`
+  or YAML parser was installed, and no dependency was added solely for that
+  check.
+- The Windows, Linux, and macOS Apple Silicon matrix must pass on GitHub before
+  this milestone is complete.
+- The real release path can only be exercised by a future manual final-version
+  dispatch from public `main` after merge. Do not dispatch a release from this
+  topic branch.
+- The approved design and implementation plan remain in
+  `docs/superpowers/` until implementation review and the GitHub matrix pass;
+  retire both in the final handoff commit afterward.
 
-Companion projects point at maintained forks: `Alrauna/material-combiner-addon`,
-`Alrauna/immersive_scaler`, and
-`Alrauna/Cats-Blender-Plugin-Unofficial-translations` for both the dictionary and
-the UI translation download. Patch notes point at this fork's releases rather
-than the archived project's. The Support Us button was removed; its only target
-returned 404 and this fork has no website. Registered classes are 136, down from
-137, for that reason alone.
+## Next action
 
-### Topology
-
-`main` is the default branch. `main` and `blender-52` are identical; keep them in
-step when committing to either. `blender-45` and `blender-45-dev` are kept because
-Blender 4.5 LTS is still supported. Fifteen branches for Blender 3.6 through 5.0
-were deleted, along with the local `blender-50` and the `upstream` remote that
-pointed at `git.disroot.org/Neoneko`.
-
-All 117 original tags are kept, plus nine `archive/<branch>` tags created for the
-branch tips no release tag reached: `Welcome`, `blender-36-dev`, `blender-40`,
-`blender-40-dev`, `blender-41`, `blender-41-dev`, `blender-42-dev`,
-`blender-43-dev`, and `blender-44-dev`. Every deleted tip was confirmed reachable
-from a tag before deletion. To recover one, branch from its tag.
-
-## Overdraw Prevention
-
-Branch `feature/overdraw-prevention` is complete and ready for review at `fd90759`,
-14 commits ahead of `main` and unpushed. Its objective — the Overdraw Prevention
-panel and the workflow gating that makes it mirror the separator — is met, the full
-change gate passes, and the maintainer has confirmed the panel in the GUI.
-
-Branch `feature/separator-version-gate` is stacked on it, with the maintainer's
-explicit approval for the stacked workflow. It enforces the separator 1.3.0 floor
-and releases CATS as `5.2.1`. Both branches are unpushed; `feature/overdraw-prevention`
-merges onto `main` first, then this branch rebases onto the updated `main`.
-
-`ui/optimization.py` gained an **Overdraw Prevention** sub-panel between Atlas and
-Material. It drives the external Blender Alpha Material Separator extension —
-`Alrauna/blender-alpha-material-separator`, id `alpha_material_separator` — through
-its four published workflow operators, and offers a download button when the
-separator is absent.
-
-`tools/overdraw.py` holds the integration. Nothing imports separator code:
-detection is `hasattr` on `bpy.ops.alpha_material_separator` plus the
-`WindowManager.alpha_material_separator_api` property, because the separator is an
-extension whose module path varies with the repository it was installed from. This
-is deliberately not the `addon_utils` name scan the Material Combiner integration
-uses. Status text is the separator's own `message` field; CATS never composes it.
-
-`configure_analysis()` copies seven `analyze` operator properties from the
-separator's public settings, plus the override payload, because `analyze` reads its
-own RNA and never consults those settings itself. `api_major = 1` is the version
-handshake; the separator refuses a mismatch.
-
-Registered CATS classes are 138: 135 before this work, plus two `cats_overdraw`
-operators and one panel.
-
-### Requires Alpha Material Separator 1.3.0 or newer
-
-Separator 1.3.0 publishes `workflow_json` on
-`WindowManager.alpha_material_separator_api` — a computed `get=` property carrying the
-same workflow snapshot the separator's own panel draws from. `Overdraw.workflow_state()`
-reads it, and the panel draws Preview when `can_preview`, Apply when `can_apply`, and
-Clear when `analysis_id` is set. Because the separator computes that snapshot once for
-both surfaces, CATS's gating cannot drift from what the separator will accept.
-
-1.3.0 also publishes `severity` in every status payload, so CATS no longer keeps its own
-list of which status codes are serious. `Overdraw.status_severity()` reads it and
-defaults to `OK` when absent.
-
-A stale result is raised to an error box even though the separator files `RESULT_STALE`
-as `INFO`. The separator can afford `INFO` because its own panel reddens the step it
-blocks; CATS has no equivalent step, so the status line carries the severity instead.
-
-`RECHECK_PENDING` is deliberately not treated as stale. The separator raises it from
-depsgraph notifications, which Blender also emits for harmless selection and mode
-changes, and resolves it on the next action. Treating it as staleness would blank the
-panel on a mode switch.
-
-An installed separator that publishes an API older than 1.3 is refused:
-`Overdraw.meets_minimum_api()` compares the published `api_version` against
-`SEPARATOR_MINIMUM_API`, and the panel draws the requirement and the download button
-instead of the workflow. An unreadable version counts as too old, which only an older
-separator produces. This replaces the earlier silent fallback, which was only there
-because the separator's release version could not be told apart from its API version
-before 1.3.0.
-
-## Outstanding
-
-- No interactive coverage exists for import/export, file browser, or material
-  preview workflows. Background tests cannot substitute for these.
-- Overdraw Prevention is verified in background mode against separator 1.3.0 by
-  `tests/overdraw_workflow_probe.py`: gating is off before analysis, open after it,
-  closed by a settings change, and correctly left open by a mesh edit. That file skips
-  itself when the separator is absent, so CI can run it in the CATS-only profile
-  without installing the separator. The maintainer confirmed the same four cases in
-  the GUI on 2026-08-08 against
-  `cats_blender_plugin-5.2.0-alpha.1-b01aa8e.zip`, which also settles panel repaint
-  on a separator state change. Still unverified and GUI-only: the download
-  confirmation dialog.
-- CATS no longer reads any separator status code by value; severity and gating both come
-  from published fields. The seven mirrored `analyze` property names are guarded upstream
-  as `api_contract.ANALYSIS_SETTING_NAMES`, and `api_major` still turns a rename into a
-  refusal rather than a wrong result.
-- The `ja_JP`, `ko_KR`, and `zh_CN` Overdraw Prevention strings need native review,
-  including the two new keys `OptimizePanel.overdrawOutdated1` and
-  `OptimizePanel.overdrawOutdated2`.
-- The blocked path has no automated coverage against a genuinely old separator. The
-  `1.2.0`-named archive in `.local-references/` is 1.3 code with a 1.2.0 manifest, so it
-  reports `api_version 1.3` and passes the gate. `tests/overdraw_smoke.py` covers the
-  decision logic with stubs; the drawn result on a real pre-1.3 separator is GUI-only.
-- The `ja_JP`, `ko_KR`, and `zh_CN` maintainer credit strings need a native
-  review. The maintainer name was left untranslated inside each sentence.
-- The credits panel's Help button and three in-app wiki links point at the
-  archived upstream wiki, which is the only feature documentation that exists.
-  They stay until this fork has a wiki of its own.
-- `.gitmodules` points `extern_tools/imscale` at
-  `https://github.com/Alrauna/immersive_scaler.git`, but no gitlink is registered
-  for that path, so the submodule is still absent at runtime. Registering it is a
-  separate decision.
-- `FixArmature.cantFix3` and `update_dictionary.error.apiChanged` tell users to
-  find forum and Discord links in the credits panel. Neither exists there. Both
-  messages were already stale before this work started, and the credits panel now
-  holds only Help and Patch notes. Rewording them needs a decision on where users
-  should actually report problems; the issue tracker is the only channel this fork
-  has.
-
-## Packaging guardrails
-
-Build with `python scripts/build.py --blend <blender>`. It names and places the
-package itself and refuses a dirty tracked tree. `tests/verify_package.py` fails
-the build if anything under `FORBIDDEN_TOP_LEVEL` reaches a package; a new
-repository-only directory must be added there and to `paths_exclude_pattern` in
-the same change.
-
-The CI workflow still builds with the raw `extension build` commands rather than
-`scripts/build.py`, because it packages into `RUNNER_TEMP`. It calls
-`verify_package.py`, so the exclusion guardrail applies there too. This
-divergence is deliberate.
-
-## Local environment notes
-
-Test blend files are gitignored by design and must stay that way. They are
-downloaded on demand by `tests/run.py`; keep local copies under the canonical
-names (`tests/armatures/armature.ryuko.blend`,
-`tests/armatures/armature.bonetranslationerror.blend`,
-`tests/shapekeys/shapekey.shape_key_to_basis.blend`) so offline runs match CI.
-
-Do not run the documented `compileall -q -f .` from the repository root without
-narrowing the paths. It descends into `.local-references/` and `.test-runtime/`
-and writes bytecode into the read-only 5.0 reference tree. Pass the source
-directories explicitly instead.
+Obtain explicit authorization to push `codex/ci-hardening-release` and open a
+draft pull request targeting `main`. Then wait for all three matrix entries,
+address any verified failure through a RED/GREEN fix, update this handoff with
+the PR/check results, retire the in-flight design and plan, and commit the final
+milestone handoff. Do not publish a release as part of branch completion.
