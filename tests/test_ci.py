@@ -181,6 +181,104 @@ class WorkflowPolicyTests(unittest.TestCase):
         ):
             self.assertIn(path, self.workflow)
 
+    def test_release_is_manual_main_only_and_write_scoped(self):
+        self.assertIn("github.event_name == 'workflow_dispatch'", self.workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", self.workflow)
+        self.assertIn(
+            "github.event.repository.visibility == 'public'", self.workflow
+        )
+        self.assertIn("environment: release", self.workflow)
+        self.assertIn("contents: write", self.workflow)
+        self.assertIn("needs: [validate, release_gate]", self.workflow)
+        self.assertIn("SHA256SUMS.txt", self.workflow)
+        self.assertIn("--draft", self.workflow)
+        self.assertIn("Download and verify stored ZIP", self.workflow)
+
+
+class ReleaseCliTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ci = load_ci_module()
+
+    def test_prepare_release_writes_expected_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "blender_manifest.toml"
+            archive = root / "cats_blender_plugin-5.2.2.zip"
+            sums = root / "SHA256SUMS.txt"
+            output = root / "github-output.txt"
+            manifest.write_text(
+                'id = "cats_blender_plugin"\nversion = "5.2.2"\n',
+                encoding="utf-8",
+            )
+            archive.write_bytes(b"package")
+            self.assertEqual(
+                0,
+                self.ci.main(
+                    [
+                        "prepare-release",
+                        "--version",
+                        "5.2.2",
+                        "--manifest",
+                        str(manifest),
+                        "--archive",
+                        str(archive),
+                        "--checksum-output",
+                        str(sums),
+                        "--github-output",
+                        str(output),
+                    ]
+                ),
+            )
+            written = output.read_text("utf-8")
+            self.assertIn("tag=v5.2.2\n", written)
+            self.assertIn(
+                "archive_name=cats_blender_plugin-5.2.2.zip\n", written
+            )
+            self.assertRegex(written, r"sha256=[0-9a-f]{64}\n")
+
+    def test_prepare_release_rejects_wrong_archive_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "blender_manifest.toml"
+            archive = root / "wrong.zip"
+            manifest.write_text(
+                'id = "cats_blender_plugin"\nversion = "5.2.2"\n',
+                encoding="utf-8",
+            )
+            archive.write_bytes(b"package")
+            with self.assertRaisesRegex(ValueError, "must be named"):
+                self.ci.main(
+                    [
+                        "prepare-release",
+                        "--version",
+                        "5.2.2",
+                        "--manifest",
+                        str(manifest),
+                        "--archive",
+                        str(archive),
+                        "--checksum-output",
+                        str(root / "SHA256SUMS.txt"),
+                        "--github-output",
+                        str(root / "github-output.txt"),
+                    ]
+                )
+
+    def test_verify_file_rejects_stored_file_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "stored.zip"
+            archive.write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError, "mismatch"):
+                self.ci.main(
+                    [
+                        "verify-file",
+                        "--file",
+                        str(archive),
+                        "--expected-sha256",
+                        "0" * 64,
+                    ]
+                )
+
 
 class FixtureSecurityTests(unittest.TestCase):
     def test_canonical_asset_hashes_are_committed(self):

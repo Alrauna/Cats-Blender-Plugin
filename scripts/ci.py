@@ -464,6 +464,21 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--platform", choices=tuple(PLATFORMS), required=True)
     prepare.add_argument("--output-dir", type=Path, required=True)
     prepare.add_argument("--github-output", type=Path)
+
+    check_release = subparsers.add_parser("check-release")
+    check_release.add_argument("--version", required=True)
+    check_release.add_argument("--manifest", type=Path, required=True)
+
+    prepare_release = subparsers.add_parser("prepare-release")
+    prepare_release.add_argument("--version", required=True)
+    prepare_release.add_argument("--manifest", type=Path, required=True)
+    prepare_release.add_argument("--archive", type=Path, required=True)
+    prepare_release.add_argument("--checksum-output", type=Path, required=True)
+    prepare_release.add_argument("--github-output", type=Path, required=True)
+
+    verify_file = subparsers.add_parser("verify-file")
+    verify_file.add_argument("--file", type=Path, required=True)
+    verify_file.add_argument("--expected-sha256", required=True)
     return parser
 
 
@@ -473,6 +488,21 @@ def main(argv: list[str] | None = None) -> int:
         prepare_blender(
             arguments.platform, arguments.output_dir, arguments.github_output
         )
+    elif arguments.command == "check-release":
+        release_identity(arguments.version, arguments.manifest)
+    elif arguments.command == "prepare-release":
+        tag, archive_name = release_identity(arguments.version, arguments.manifest)
+        if arguments.archive.name != archive_name:
+            raise ValueError(f"release archive must be named {archive_name!r}")
+        digest = write_sha256s(arguments.archive, arguments.checksum_output)
+        write_github_output(
+            arguments.github_output,
+            tag=tag,
+            archive_name=archive_name,
+            sha256=digest,
+        )
+    elif arguments.command == "verify-file":
+        require_file_sha256(arguments.file, arguments.expected_sha256)
     return 0
 
 

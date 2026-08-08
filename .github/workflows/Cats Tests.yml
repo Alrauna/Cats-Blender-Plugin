@@ -184,3 +184,151 @@ jobs:
           path: ${{ runner.temp }}/cats_blender_plugin.zip
           if-no-files-found: error
           retention-days: 7
+
+  release_gate:
+    name: Check final release request
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release != '' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.visibility == 'public'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RELEASE_VERSION: ${{ inputs.release }}
+
+    steps:
+      - name: Check out source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Require an exact final manifest version
+        run: >-
+          python scripts/ci.py check-release
+          --version "$RELEASE_VERSION"
+          --manifest blender_manifest.toml
+
+  release:
+    name: Publish verified final release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release != '' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.visibility == 'public'
+    needs: [validate, release_gate]
+    runs-on: windows-2025
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_VERSION: ${{ inputs.release }}
+
+    steps:
+      - name: Fetch exact public source
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${EXPECTED_SHA}"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - name: Verify release Blender
+        id: release_blender
+        run: >-
+          python scripts/ci.py prepare-blender
+          --platform windows
+          --output-dir '${{ runner.temp }}/release-blender-5.2.0'
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Build and validate fresh release ZIP
+        run: |
+          set -euo pipefail
+          release_dir='${{ runner.temp }}/release'
+          archive="${release_dir}/cats_blender_plugin-${RELEASE_VERSION}.zip"
+          mkdir -p "${release_dir}"
+          '${{ steps.release_blender.outputs.blender }}' \
+            --command extension validate .
+          '${{ steps.release_blender.outputs.blender }}' \
+            --command extension build \
+            --source-dir . \
+            --output-filepath "${archive}"
+          '${{ steps.release_blender.outputs.blender }}' \
+            --command extension validate "${archive}"
+          '${{ steps.release_blender.outputs.python }}' \
+            tests/verify_package.py "${archive}" --source-dir .
+
+      - name: Prepare release identity and checksum
+        id: release_meta
+        run: >-
+          python scripts/ci.py prepare-release
+          --version "$RELEASE_VERSION"
+          --manifest blender_manifest.toml
+          --archive '${{ runner.temp }}/release/cats_blender_plugin-${{ inputs.release }}.zip'
+          --checksum-output '${{ runner.temp }}/release/SHA256SUMS.txt'
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Refuse an existing tag or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag already exists: ${TAG}" >&2
+            exit 1
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release already exists: ${TAG}" >&2
+            exit 1
+          fi
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: >-
+          gh release create "$TAG"
+          --draft
+          --generate-notes
+          --title "$TAG"
+          --target '${{ github.sha }}'
+
+      - name: Upload release ZIP and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: >-
+          gh release upload "$TAG"
+          '${{ runner.temp }}/release/${{ steps.release_meta.outputs.archive_name }}'
+          '${{ runner.temp }}/release/SHA256SUMS.txt'
+
+      - name: Download and verify stored ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+          ARCHIVE_NAME: ${{ steps.release_meta.outputs.archive_name }}
+          EXPECTED_SHA256: ${{ steps.release_meta.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          stored_dir='${{ runner.temp }}/stored-release'
+          mkdir -p "${stored_dir}"
+          gh release download "${TAG}" \
+            --pattern "${ARCHIVE_NAME}" \
+            --dir "${stored_dir}"
+          python scripts/ci.py verify-file \
+            --file "${stored_dir}/${ARCHIVE_NAME}" \
+            --expected-sha256 "${EXPECTED_SHA256}"
+
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release_meta.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false
