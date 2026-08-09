@@ -58,6 +58,20 @@ Do not install a repository source ZIP downloaded from a hosting website. That
 archive may carry an extra wrapper directory and has not been through Blender's
 extension builder.
 
+### Verify release provenance
+
+GitHub releases from version 5.2.2 onward include signed build provenance for
+the CATS extension ZIP. After downloading the ZIP, verify it online with
+GitHub CLI:
+
+```text
+gh attestation verify cats_blender_plugin-5.2.2.zip \
+  -R Alrauna/Cats-Blender-Plugin
+```
+
+`SHA256SUMS.txt` verifies file integrity; the attestation additionally verifies
+the repository and GitHub Actions workflow that produced the ZIP.
+
 ## Features
 
 - **Import and export:** MMD, VRM, FBX, Source Engine, and more
