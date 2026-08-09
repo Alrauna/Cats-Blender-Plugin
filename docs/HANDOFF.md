@@ -27,7 +27,7 @@
 Prepare version `5.2.2` as the first GitHub-attested release while preserving
 the existing manual release and validation controls.
 
-Revised design pending user re-approval:
+Approved revised design:
 `docs/superpowers/specs/2026-08-08-release-attestation-5-2-2-design.md`.
 
 Security review found that the original single-job design would expose the
@@ -47,6 +47,7 @@ an unpublished draft by tag and introduces no workflow-artifact transfer.
 
 ## Next action
 
-Review and re-approve the revised written design specification. After approval,
-write and review the test-first implementation plan before editing production
-files.
+Review the test-first implementation plan at
+`docs/superpowers/plans/2026-08-09-release-attestation-5-2-2.md`. After plan
+approval, execute it with `superpowers:executing-plans`; production files remain
+unchanged until that approval.
