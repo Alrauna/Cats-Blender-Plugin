@@ -122,5 +122,6 @@ Review the digest-based attestation fix design at
 The failed run is `31304178838`; draft release ID `367427437` remains
 unpublished with its verified ZIP and checksum assets. Do not delete, modify,
 publish, or reuse that draft without explicit authorization. After design
-approval, write and approve a test-first implementation plan before changing
-the workflow.
+approval, review the test-first implementation plan at
+`docs/superpowers/plans/2026-08-09-digest-attestation-draft-access.md` before
+changing the workflow.
