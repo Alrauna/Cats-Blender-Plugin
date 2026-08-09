@@ -8,8 +8,11 @@
 - Completed topic branch: `codex/release-attestation-5-2-2`, based directly on
   that commit. Its production/workflow head is
   `c11acff3b521a81af43efae0961b666d59441da7`.
-- GitHub currently has no open pull requests. The latest published release is
-  still `v5.2.1`; no 5.2.2 tag, release, or workflow dispatch was created.
+- Draft pull request #3, `Attest CATS 5.2.2 release artifacts`, is open against
+  `main` from this pushed topic branch:
+  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/3`.
+- The latest published release is still `v5.2.1`; no 5.2.2 tag, release, or
+  workflow dispatch was created.
 - The tracked worktree was clean before this handoff update. Generated Blender
   profiles and packages remain ignored under `.test-runtime/` and
   `.packaged-releases/`.
@@ -112,9 +115,8 @@ channel. It also keeps its own version policy and uses 5.2.2, not AMS 1.3.1.
 
 ## Next action
 
-Request explicit authorization to push this branch and open a draft pull
-request targeting `main`. Then require the three-platform validation matrix,
-CodeQL, and review of the hosted workflow syntax/results. Do not dispatch
+Wait for pull request #3's three-platform validation matrix and CodeQL checks,
+then review the hosted workflow syntax/results and branch diff. Do not dispatch
 `release=5.2.2` during PR validation or merge. After review and merge, an
 authorized maintainer can intentionally dispatch 5.2.2 from public `main` and
 manually verify the draft, attestation, and publication behavior.
