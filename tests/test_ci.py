@@ -263,11 +263,12 @@ class WorkflowPolicyTests(unittest.TestCase):
             "asset_id",
         ):
             self.assertIn(f"      {output}: ${{{{ steps.", draft)
-            self.assertIn(f"needs.draft_release.outputs.{output}", attest)
             self.assertIn(f"needs.draft_release.outputs.{output}", publish)
-        self.assertIn("releases/assets/${ASSET_ID}", attest)
+        for output in ("archive_name", "sha256"):
+            self.assertIn(f"needs.draft_release.outputs.{output}", attest)
+        for output in ("tag", "release_id", "asset_id"):
+            self.assertNotIn(f"needs.draft_release.outputs.{output}", attest)
         self.assertIn("releases/assets/${ASSET_ID}", publish)
-        self.assertIn("sha256sum", attest)
         self.assertIn("sha256sum", publish)
         self.assertLess(
             draft.index('[[ "${release_id}" =~ ^[0-9]+$ ]]'),
@@ -277,34 +278,57 @@ class WorkflowPolicyTests(unittest.TestCase):
             draft.index('[[ "${asset_id}" =~ ^[0-9]+$ ]]'),
             draft.index("releases/assets/${asset_id}"),
         )
-        for block in (attest, publish):
-            self.assertLess(
-                block.index('[[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]'),
-                block.index("releases/${RELEASE_ID}"),
-            )
-            self.assertLess(
-                block.index('[[ "${ASSET_ID}" =~ ^[0-9]+$ ]]'),
-                block.index("releases/assets/${ASSET_ID}"),
-            )
-        self.assertIn(
-            "subject-path: '${{ runner.temp }}/stored-release/"
-            "${{ needs.draft_release.outputs.archive_name }}'",
-            attest,
+        self.assertLess(
+            publish.index('[[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]'),
+            publish.index("releases/${RELEASE_ID}"),
         )
-        self.assertEqual(1, attest.count("subject-path:"))
-        self.assertNotIn("subject-checksums:", attest)
+        self.assertLess(
+            publish.index('[[ "${ASSET_ID}" =~ ^[0-9]+$ ]]'),
+            publish.index("releases/assets/${ASSET_ID}"),
+        )
         self.assertIn("releases/${RELEASE_ID}", publish)
         self.assertIn("-F draft=false", publish)
-        self.assertLess(
-            attest.index('test "${actual_sha256}" = "${EXPECTED_SHA256}"'),
-            attest.index("uses: actions/attest@"),
-        )
         self.assertLess(
             publish.index('test "${actual_sha256}" = "${EXPECTED_SHA256}"'),
             publish.index("-F draft=false"),
         )
         self.assertNotIn("actions/upload-artifact", draft + attest + publish)
         self.assertNotIn("actions/download-artifact", draft + attest + publish)
+
+    def test_attestation_uses_verified_digest_without_draft_access(self):
+        attest = workflow_job(self.workflow, "attest_release")
+
+        self.assertNotIn("gh api", attest)
+        self.assertNotIn("GH_TOKEN:", attest)
+        self.assertNotIn("releases/${RELEASE_ID}", attest)
+        self.assertNotIn("releases/assets/${ASSET_ID}", attest)
+        self.assertNotIn("sha256sum", attest)
+        inputs = re.search(
+            r"^        with:\n"
+            r"(?P<body>(?:(?:^          .*\n)|(?:^[ \t]*\n))*)",
+            attest,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(inputs)
+        self.assertEqual(1, attest.count("\n        with:\n"))
+        input_names = set(
+            re.findall(
+                r"^          ([a-z-]+):", inputs.group("body"), re.MULTILINE
+            )
+        )
+        self.assertEqual({"subject-name", "subject-digest"}, input_names)
+        self.assertIn(
+            "subject-name: ${{ needs.draft_release.outputs.archive_name }}",
+            attest,
+        )
+        self.assertIn(
+            "subject-digest: sha256:${{ needs.draft_release.outputs.sha256 }}",
+            attest,
+        )
+        self.assertEqual(1, attest.count("subject-name:"))
+        self.assertEqual(1, attest.count("subject-digest:"))
+        self.assertNotIn("subject-path:", attest)
+        self.assertNotIn("subject-checksums:", attest)
 
     def test_release_is_manual_public_main_only_and_validation_gated(self):
         condition_parts = (
