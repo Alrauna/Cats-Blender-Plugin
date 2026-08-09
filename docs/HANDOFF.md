@@ -27,15 +27,26 @@
 Prepare version `5.2.2` as the first GitHub-attested release while preserving
 the existing manual release and validation controls.
 
-Approved design:
+Revised design pending user re-approval:
 `docs/superpowers/specs/2026-08-08-release-attestation-5-2-2-design.md`.
 
-The design limits OIDC and attestation write permissions to the existing
-protected release job and attests the GitHub-stored ZIP after digest
-verification but before publication. It does not authorize a release dispatch,
-tag, push, or GitHub release.
+Security review found that the original single-job design would expose the
+`contents: write` token to the attestation action through `github.token`, even
+without an explicit token input. The revised design splits release work into
+`draft_release`, read-only `attest_release`, and `publish_release`; no job that
+contains an action has `contents: write`.
+
+The current `release` environment has no protection rules or deployment branch
+policy. It produces no approval prompt today. Both write-capable jobs will
+still reference it so future protection rules cover both; if required reviewers
+are later enabled, two sequential approvals may be necessary.
+
+The revised design also passes numeric release/asset IDs alongside the validated
+name, tag, and digest. This avoids relying on undocumented read-only lookup of
+an unpublished draft by tag and introduces no workflow-artifact transfer.
 
 ## Next action
 
-Review the written design specification. After approval, write and review the
-test-first implementation plan before editing production files.
+Review and re-approve the revised written design specification. After approval,
+write and review the test-first implementation plan before editing production
+files.
