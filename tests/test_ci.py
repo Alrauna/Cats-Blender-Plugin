@@ -303,6 +303,20 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertNotIn("releases/${RELEASE_ID}", attest)
         self.assertNotIn("releases/assets/${ASSET_ID}", attest)
         self.assertNotIn("sha256sum", attest)
+        inputs = re.search(
+            r"^        with:\n"
+            r"(?P<body>(?:(?:^          .*\n)|(?:^[ \t]*\n))*)",
+            attest,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(inputs)
+        self.assertEqual(1, attest.count("\n        with:\n"))
+        input_names = set(
+            re.findall(
+                r"^          ([a-z-]+):", inputs.group("body"), re.MULTILINE
+            )
+        )
+        self.assertEqual({"subject-name", "subject-digest"}, input_names)
         self.assertIn(
             "subject-name: ${{ needs.draft_release.outputs.archive_name }}",
             attest,
