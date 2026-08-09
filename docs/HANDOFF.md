@@ -2,128 +2,85 @@
 
 ## Repository state
 
-- Base/default branch: `origin/main` at merge commit
-  `19d46f27100ae111eac73a29fd89df79edfaf398`.
-- Active review branch: `codex/fix-release-attestation-draft-access`, based
-  directly on that commit. Draft pull request #4 targets `main`:
-  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/4`.
+- Default branch: `origin/main` at merge commit
+  `cfae36c0e3c1cc635186e2bc97e48964841f52c6`.
+- Active branch: `codex/fix-release-draft-lookup`, created directly from that
+  commit to fix the hosted release verification failure.
+- CATS version metadata remains synchronized at final version `5.2.2`.
 - The latest published release remains `v5.2.1`.
-- Manual 5.2.2 workflow run `31304178838` created draft release ID
-  `367427437` and failed before attestation. After the fix branch and PR were
-  created, the user explicitly authorized deletion of failed 5.2.2 drafts.
-  Draft `367427437` and its ZIP/checksum assets were permanently deleted;
-  follow-up API queries found no remaining `v5.2.2` release or Git tag.
-- CATS version metadata remains synchronized at final version `5.2.2`; no
-  additional version bump was needed because 5.2.2 has not been published.
+- Failed draft release `367444039`, created by run `31307655995` for target
+  `cfae36c0e3c1cc635186e2bc97e48964841f52c6`, was permanently deleted under
+  the user's explicit instruction. Its ZIP asset ID was `507383000` with
+  SHA-256 `2b0bee54d9718c7c14f8d772c9d3f3baab84ad50bfa1bfddb1316c6ff49e0ccd`;
+  checksum asset ID was `507383002`. Follow-up queries found no `v5.2.2`
+  release or Git tag.
 
-## Incident and root cause
+## Hosted incident and root cause
 
-The merged release design gave `attest_release` only `contents: read`,
-`id-token: write`, and `attestations: write`, then attempted to retrieve the
-numeric draft release before downloading its primary asset. GitHub returned
-`HTTP 403: Resource not accessible by integration` on the first
-`GET /releases/{release_id}`. GitHub exposes draft releases only to identities
-with push access, so the asset download was never reached.
+Manual release run `31307655995` successfully passed all validation and the
+release gate, created the draft, and uploaded both assets. The draft job then
+failed before attestation while verifying the stored release:
 
-The security boundary behaved correctly:
+```text
+jq: error: draft release is missing or duplicated
+```
 
-- `draft_release` built, uploaded, downloaded, and verified the stored 5.2.2
-  ZIP and emitted its validated name, SHA-256, release ID, and asset ID.
-- `attest_release` failed before the pinned action ran.
-- `publish_release` was skipped, leaving the release as a draft.
+Verification immediately searched the paginated releases collection for the
+new draft and required exactly one match. The draft's successful creation and
+asset uploads prove that the failure was the post-create collection lookup,
+not release creation. The collection did not expose a unique match at that
+instant, so the workflow failed closed. `attest_release` never ran and
+`publish_release` was skipped.
 
-Granting the attestation job `contents: write`, a PAT, or a push-capable GitHub
-App token was rejected. Any action can access its job's `github.token` even
-when that token is not explicitly passed. Full-SHA pinning mitigates action
-substitution but does not replace job-level credential isolation.
+## Approved correction
 
-## Completed correction
+The draft job now creates the release with `POST /releases`, captures the
+authoritative numeric `.id` from the successful response, validates it, and
+emits it as `steps.created_release.outputs.release_id`. The existing successful
+`gh release upload` command remains. Stored-release verification consumes the
+captured ID and calls `GET /releases/{id}` directly; it no longer rediscovers
+the new draft through the releases collection.
 
-- `acddd0c` — remove the inaccessible draft API/download step and attest the
-  stored artifact's already-verified name and digest using the pinned action's
-  native inputs.
-- `9c6fae0` — restrict the action `with:` mapping to exactly `subject-name` and
-  `subject-digest`, including across blank lines and YAML comments.
+The following boundaries are unchanged:
 
-The release graph remains fail closed:
+- `draft_release`: `contents: write`, protected `release` environment, no
+  actions, exact-commit build, draft creation, upload, stored-byte verification.
+- `attest_release`: `contents: read`, `id-token: write`,
+  `attestations: write`, no environment, and only
+  `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` with the verified
+  subject name and digest.
+- `publish_release`: `contents: write`, protected `release` environment, no
+  actions, and re-verification of the exact release, asset, digest, and bytes
+  before publication.
 
-1. `draft_release` depends on `validate` and `release_gate`, references the
-   `release` environment, has only `contents: write`, and contains no actions.
-   It verifies the exact public source commit, builds and validates the ZIP,
-   creates the draft, uploads both assets, downloads the stored primary asset
-   by numeric ID, and verifies its GitHub digest metadata and bytes.
-2. `attest_release` depends on `draft_release`, has exactly `contents: read`,
-   `id-token: write`, and `attestations: write`, and has no environment. Its
-   only step is
-   `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6`, with:
-   - `subject-name: ${{ needs.draft_release.outputs.archive_name }}`
-   - `subject-digest: sha256:${{ needs.draft_release.outputs.sha256 }}`
-3. `publish_release` depends on both preceding jobs, references the `release`
-   environment, has only `contents: write`, and contains no actions. It
-   rechecks numeric release/asset identity, target commit, stored digest, and
-   downloaded bytes immediately before publishing the exact draft.
+Full-SHA pinning mitigates action substitution but does not make it safe to
+give an action `contents: write`; isolation remains enforced by job boundaries.
+No retry, sleep, new action, dependency, token, permission, artifact transfer,
+or alternate publication path was added.
 
-This cryptographically binds the attestation to the stored ZIP without giving
-the action release-write credentials: the draft job proves the stored bytes
-equal digest D, the isolated action attests archive name N at D, and the
-publication job proceeds only if the stored bytes still equal D. No workflow
-artifact transfer, new action, dependency, credential, recovery mode, or
-automatic publication was introduced.
+## Test-first evidence
 
-## Test-first evidence and review
+The new contract initially failed because the create step had no ID output and
+verification used the paginated releases list. After the minimal workflow
+change:
 
-The focused RED contract failed because the merged workflow still contained
-`gh api` draft access and `subject-path`. After the minimal YAML correction:
+- `python -m unittest tests.test_ci.WorkflowPolicyTests -v` — 10 passed.
+- `python -m unittest tests.test_ci -v` — 26 passed.
+- The regression contract requires REST creation, numeric `.id` extraction,
+  step-output propagation, direct numeric verification, and absence of the
+  collection lookup from the verification step.
 
-- three focused credential/data-flow contracts passed;
-- all 25 `tests.test_ci` tests passed;
-- the action-input allowlist was mutation-tested and rejected a temporary
-  `github-token` placed after a blank line and comment;
-- the secure workflow was restored before commits and the full suite passed;
-- independent correctness/security review reported no remaining Critical,
-  Important, or Minor findings.
+## Hosted-only checks
 
-## Local verification
-
-The following passed on Windows with Blender 5.2 and isolated profiles:
-
-- `python -m unittest tests.test_ci -v` — 25 tests.
-- Explicit-path `compileall` over source and tests.
-- `blender.exe --factory-startup --command extension validate .`.
-- `python scripts/build.py --blend <Blender 5.2>`.
-- Independent `tests/verify_package.py` verification.
-- `git diff --check` and clean tracked status.
-
-Verified package from implementation commit `acddd0c`:
-
-- Path:
-  `.packaged-releases/cats_blender_plugin-5.2.2-acddd0c.zip`.
-- SHA-256:
-  `52538592310b08628ccc72f79b7d6656a76fcdbf0f9d796a24b0822a84b0bfbb`.
-- Contents: 183 files and 129 Python modules; Blender 5.2-compatible manifest
-  at version 5.2.2.
-- Generated packages and Blender profiles remain ignored and must not be
-  staged.
-
-## Hosted-only checks and recovery boundary
-
-Local verification cannot prove:
-
-- GitHub's hosted YAML execution of the two action inputs.
-- OIDC issuance and GitHub/Sigstore attestation persistence.
-- `gh attestation verify` resolving the downloaded ZIP's digest attestation.
-- Successful publication after the write job re-verifies the stored draft.
-- Environment approval UX if protection rules are later enabled.
-
-Failed draft release ID `367427437` and its assets have been permanently
-deleted under explicit authorization. After this fix is reviewed and merged,
-an authorized maintainer must separately approve rerunning `release=5.2.2`
-from the new public `main` commit. The recovery run must verify the attestation,
-release target, stored ZIP digest, and final publication.
+Local tests cannot prove GitHub's hosted REST read-after-write behavior, the
+OIDC attestation exchange and persistence, or final publication. After review
+and merge, an authorized maintainer must manually rerun `release=5.2.2` from
+the new public `main` commit and confirm the draft verification, attestation,
+publish re-verification, final release asset, and provenance.
 
 ## Next action
 
-Wait for pull request #4's three-platform validation matrix, CodeQL, and review
-of the hosted workflow diff. Do not rerun the release workflow, create a tag,
-or publish 5.2.2 during PR review or merge. After merge, request separate
-authorization for the intentional 5.2.2 recovery run.
+Complete final branch verification, commit the implementation, remove the
+in-flight design and plan documents in a cleanup commit, push the branch, and
+open a pull request targeting `main`. Do not rerun or publish 5.2.2 before the
+fix is reviewed and merged.

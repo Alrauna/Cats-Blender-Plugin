@@ -305,15 +305,24 @@ jobs:
           fi
 
       - name: Create draft release
+        id: created_release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release_meta.outputs.tag }}
-        run: >-
-          gh release create "$TAG"
-          --draft
-          --generate-notes
-          --title "$TAG"
-          --target '${{ github.sha }}'
+          EXPECTED_TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="${TAG}" \
+            -f target_commitish="${EXPECTED_TARGET_SHA}" \
+            -f name="${TAG}" \
+            -F draft=true \
+            -F generate_release_notes=true)"
+          release_id="$(printf '%s' "${release_json}" | jq -er \
+            '.id | if type == "number" and . > 0 then tostring else error("created release ID is missing or invalid") end')"
+          [[ "${release_id}" =~ ^[0-9]+$ ]]
+          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload release ZIP and checksum
         env:
@@ -332,12 +341,11 @@ jobs:
           ARCHIVE_NAME: ${{ steps.release_meta.outputs.archive_name }}
           EXPECTED_SHA256: ${{ steps.release_meta.outputs.sha256 }}
           EXPECTED_TARGET_SHA: ${{ github.sha }}
+          RELEASE_ID: ${{ steps.created_release.outputs.release_id }}
         run: |
           set -euo pipefail
-          releases_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate --slurp)"
-          release_id="$(printf '%s' "${releases_json}" | jq -er --arg tag "${TAG}" '[.[][] | select(.draft == true and .tag_name == $tag)] | if length == 1 then .[0].id else error("draft release is missing or duplicated") end')"
-          [[ "${release_id}" =~ ^[0-9]+$ ]]
-          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}")"
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
           asset_id="$(printf '%s' "${release_json}" | jq -er --arg name "${ARCHIVE_NAME}" '[.assets[] | select(.name == $name)] | if length == 1 then .[0].id else error("primary release asset is missing or duplicated") end')"
           [[ "${asset_id}" =~ ^[0-9]+$ ]]
           printf '%s' "${release_json}" | jq -e \
@@ -357,7 +365,7 @@ jobs:
           python scripts/ci.py verify-file \
             --file "${stored_dir}/${ARCHIVE_NAME}" \
             --expected-sha256 "${EXPECTED_SHA256}"
-          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
+          echo "release_id=${RELEASE_ID}" >> "${GITHUB_OUTPUT}"
           echo "asset_id=${asset_id}" >> "${GITHUB_OUTPUT}"
 
   attest_release:
