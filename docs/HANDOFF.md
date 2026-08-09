@@ -80,7 +80,6 @@ publish re-verification, final release asset, and provenance.
 
 ## Next action
 
-Complete final branch verification, commit the implementation, remove the
-in-flight design and plan documents in a cleanup commit, push the branch, and
-open a pull request targeting `main`. Do not rerun or publish 5.2.2 before the
-fix is reviewed and merged.
+Implementation milestone `59bad47` is complete. Push the branch and open a
+pull request targeting `main`, then wait for its hosted workflow validation and
+review. Do not rerun or publish 5.2.2 before the fix is reviewed and merged.
