@@ -4,12 +4,15 @@
 
 - Base/default branch: `origin/main` at merge commit
   `19d46f27100ae111eac73a29fd89df79edfaf398`.
-- Completed topic branch: `codex/fix-release-attestation-draft-access`, based
-  directly on that commit.
+- Active review branch: `codex/fix-release-attestation-draft-access`, based
+  directly on that commit. Draft pull request #4 targets `main`:
+  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/4`.
 - The latest published release remains `v5.2.1`.
 - Manual 5.2.2 workflow run `31304178838` created draft release ID
-  `367427437` and failed before attestation. The draft and its verified ZIP and
-  checksum assets remain unpublished and were not modified during this fix.
+  `367427437` and failed before attestation. After the fix branch and PR were
+  created, the user explicitly authorized deletion of failed 5.2.2 drafts.
+  Draft `367427437` and its ZIP/checksum assets were permanently deleted;
+  follow-up API queries found no remaining `v5.2.2` release or Git tag.
 - CATS version metadata remains synchronized at final version `5.2.2`; no
   additional version bump was needed because 5.2.2 has not been published.
 
@@ -112,17 +115,15 @@ Local verification cannot prove:
 - Successful publication after the write job re-verifies the stored draft.
 - Environment approval UX if protection rules are later enabled.
 
-Draft release ID `367427437` must remain preserved until separately authorized
-recovery. After this fix is reviewed and merged, an authorized maintainer must
-explicitly approve deleting that failed draft and rerunning `release=5.2.2`
+Failed draft release ID `367427437` and its assets have been permanently
+deleted under explicit authorization. After this fix is reviewed and merged,
+an authorized maintainer must separately approve rerunning `release=5.2.2`
 from the new public `main` commit. The recovery run must verify the attestation,
-release target, stored ZIP digest, and final publication. Do not reuse the old
-draft implicitly.
+release target, stored ZIP digest, and final publication.
 
 ## Next action
 
-Request explicit authorization to push this branch and open a draft pull
-request against `main`. Require the three-platform validation matrix, CodeQL,
-and review of the hosted workflow diff. Do not delete draft `367427437`, rerun
-the release workflow, create a tag, or publish 5.2.2 as part of branch
-publication.
+Wait for pull request #4's three-platform validation matrix, CodeQL, and review
+of the hosted workflow diff. Do not rerun the release workflow, create a tag,
+or publish 5.2.2 during PR review or merge. After merge, request separate
+authorization for the intentional 5.2.2 recovery run.
