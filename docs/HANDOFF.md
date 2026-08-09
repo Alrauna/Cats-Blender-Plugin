@@ -2,17 +2,14 @@
 
 ## Repository state
 
-- Base/default branch: `origin/main` at
-  `90c1f194dedda1d5657a7b50ceff1a7dce4471cd` after a fresh fetch on
-  2026-08-09.
-- Completed topic branch: `codex/release-attestation-5-2-2`, based directly on
-  that commit. Its production/workflow head is
-  `c11acff3b521a81af43efae0961b666d59441da7`.
-- Draft pull request #3, `Attest CATS 5.2.2 release artifacts`, is open against
-  `main` from this pushed topic branch:
-  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/3`.
-- The latest published release is still `v5.2.1`; no 5.2.2 tag, release, or
-  workflow dispatch was created.
+- Base/default branch: `origin/main` at merge commit
+  `19d46f27100ae111eac73a29fd89df79edfaf398`.
+- Pull request #3 was merged into `main` on 2026-08-09.
+- Active topic branch: `codex/fix-release-attestation-draft-access`, based
+  directly on current `origin/main`.
+- The latest published release is still `v5.2.1`. Manual 5.2.2 run
+  `31304178838` created draft release ID `367427437` and failed before
+  attestation, so no 5.2.2 release was published.
 - The tracked worktree was clean before this handoff update. Generated Blender
   profiles and packages remain ignored under `.test-runtime/` and
   `.packaged-releases/`.
@@ -40,10 +37,12 @@ The release graph is now:
    only tag, archive name, SHA-256, release ID, and asset ID.
 2. `attest_release` depends on `draft_release`, has exactly `contents: read`,
    `id-token: write`, and `attestations: write`, and has no environment. It
-   downloads the exact draft asset by numeric ID, independently checks draft
-   identity, target commit, asset name/ID/digest, and bytes, then attests only
-   that ZIP with
+   currently attempts to download the exact draft asset by numeric ID before
+   attesting it with
    `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6`.
+   Hosted run `31304178838` proved this cannot work: GitHub returned HTTP 403
+   on the first draft-release lookup because the read-only job lacks push
+   access. The action did not run.
 3. `publish_release` depends on both earlier jobs, uses the `release`
    environment, and has only `contents: write`. It has no `uses:` steps. It
    repeats the exact identity and byte checks before publishing that numeric
@@ -95,8 +94,6 @@ Verified package from production/workflow head `c11acff`:
 Local tests cannot prove GitHub-hosted behavior for:
 
 - YAML parsing and execution on the Windows 2025 and Ubuntu 24.04 runners.
-- A read-only `GITHUB_TOKEN` downloading the unpublished draft asset by numeric
-  asset ID.
 - OIDC issuance, Sigstore/GitHub attestation persistence, and later
   `gh attestation verify` behavior.
 - GitHub release API digest population and identity checks in the live run.
@@ -108,6 +105,11 @@ Local tests cannot prove GitHub-hosted behavior for:
   the two write jobs may require two sequential approvals; this is an
   intentional cost of isolating the attestation action from write credentials.
 
+The read-only draft-access question is no longer a hosted-only unknown:
+GitHub's API rejected it with HTTP 403. The approved correction attests the
+name and digest already verified by `draft_release`, while preserving the
+write-job verification before publication.
+
 CATS intentionally differs from AMS by binding and rechecking numeric release
 and asset IDs plus GitHub's stored digest, because CATS creates and publishes a
 draft release in one workflow and does not need a second artifact-transfer
@@ -115,8 +117,10 @@ channel. It also keeps its own version policy and uses 5.2.2, not AMS 1.3.1.
 
 ## Next action
 
-Wait for pull request #3's three-platform validation matrix and CodeQL checks,
-then review the hosted workflow syntax/results and branch diff. Do not dispatch
-`release=5.2.2` during PR validation or merge. After review and merge, an
-authorized maintainer can intentionally dispatch 5.2.2 from public `main` and
-manually verify the draft, attestation, and publication behavior.
+Review the digest-based attestation fix design at
+`docs/superpowers/specs/2026-08-09-digest-attestation-draft-access-design.md`.
+The failed run is `31304178838`; draft release ID `367427437` remains
+unpublished with its verified ZIP and checksum assets. Do not delete, modify,
+publish, or reuse that draft without explicit authorization. After design
+approval, write and approve a test-first implementation plan before changing
+the workflow.
