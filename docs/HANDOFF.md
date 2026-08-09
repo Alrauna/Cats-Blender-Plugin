@@ -5,7 +5,9 @@
 - Default branch: `origin/main` at merge commit
   `cfae36c0e3c1cc635186e2bc97e48964841f52c6`.
 - Active branch: `codex/fix-release-draft-lookup`, created directly from that
-  commit to fix the hosted release verification failure.
+  commit to fix the hosted release verification failure. Draft pull request
+  #5 targets `main`:
+  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/5`.
 - CATS version metadata remains synchronized at final version `5.2.2`.
 - The latest published release remains `v5.2.1`.
 - Failed draft release `367444039`, created by run `31307655995` for target
@@ -80,6 +82,6 @@ publish re-verification, final release asset, and provenance.
 
 ## Next action
 
-Implementation milestone `59bad47` is complete. Push the branch and open a
-pull request targeting `main`, then wait for its hosted workflow validation and
-review. Do not rerun or publish 5.2.2 before the fix is reviewed and merged.
+Implementation milestone `59bad47` is complete. Wait for draft pull request
+#5's hosted workflow validation and review. Do not rerun or publish 5.2.2
+before the fix is reviewed and merged.
