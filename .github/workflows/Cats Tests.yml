@@ -287,11 +287,19 @@ jobs:
           TAG: ${{ steps.release_meta.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+          tag_refs="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${TAG}")"
+          if ! printf '%s' "${tag_refs}" | jq -e \
+            --arg ref "refs/tags/${TAG}" \
+            '[.[] | select(.ref == $ref)] | length == 0' \
+            >/dev/null; then
             echo "Tag already exists: ${TAG}" >&2
             exit 1
           fi
-          if gh release view "${TAG}" >/dev/null 2>&1; then
+          releases_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate --slurp)"
+          if ! printf '%s' "${releases_json}" | jq -e \
+            --arg tag "${TAG}" \
+            '[.[][] | select(.tag_name == $tag)] | length == 0' \
+            >/dev/null; then
             echo "Release already exists: ${TAG}" >&2
             exit 1
           fi

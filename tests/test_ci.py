@@ -327,6 +327,24 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn("SHA256SUMS.txt", draft)
         self.assertIn("--draft", draft)
 
+    def test_release_preflight_fails_closed_on_api_errors(self):
+        draft = workflow_job(self.workflow, "draft_release")
+
+        self.assertNotRegex(draft, r"if gh (?:api|release view)")
+        self.assertIn(
+            'tag_refs="$(gh api '
+            '"repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${TAG}")"',
+            draft,
+        )
+        self.assertIn(
+            'releases_json="$(gh api '
+            '"repos/${GITHUB_REPOSITORY}/releases?per_page=100" '
+            '--paginate --slurp)"',
+            draft,
+        )
+        self.assertIn("select(.ref == $ref)] | length == 0", draft)
+        self.assertIn("select(.tag_name == $tag)] | length == 0", draft)
+
 
 class ReleaseCliTests(unittest.TestCase):
     @classmethod
