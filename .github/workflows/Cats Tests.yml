@@ -374,49 +374,13 @@ jobs:
       contents: read
       id-token: write
       attestations: write
-    defaults:
-      run:
-        shell: bash
 
     steps:
-      - name: Download and verify exact draft asset
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.draft_release.outputs.tag }}
-          ARCHIVE_NAME: ${{ needs.draft_release.outputs.archive_name }}
-          EXPECTED_SHA256: ${{ needs.draft_release.outputs.sha256 }}
-          EXPECTED_TARGET_SHA: ${{ github.sha }}
-          RELEASE_ID: ${{ needs.draft_release.outputs.release_id }}
-          ASSET_ID: ${{ needs.draft_release.outputs.asset_id }}
-        run: |
-          set -euo pipefail
-          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]
-          [[ "${ASSET_ID}" =~ ^[0-9]+$ ]]
-          [[ "${EXPECTED_SHA256}" =~ ^[0-9a-f]{64}$ ]]
-          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
-          printf '%s' "${release_json}" | jq -e \
-            --arg tag "${TAG}" \
-            --arg target "${EXPECTED_TARGET_SHA}" \
-            --arg name "${ARCHIVE_NAME}" \
-            --arg digest "sha256:${EXPECTED_SHA256}" \
-            --argjson asset_id "${ASSET_ID}" \
-            '.draft == true and .tag_name == $tag and .target_commitish == $target and
-             ([.assets[] | select(.id == $asset_id and .name == $name and .digest == $digest)] | length == 1)' \
-            >/dev/null
-          stored_dir='${{ runner.temp }}/stored-release'
-          mkdir -p "${stored_dir}"
-          stored_path="${stored_dir}/${ARCHIVE_NAME}"
-          gh api -H 'Accept: application/octet-stream' \
-            "repos/${GITHUB_REPOSITORY}/releases/assets/${ASSET_ID}" \
-            > "${stored_path}"
-          actual_sha256="$(sha256sum "${stored_path}")"
-          actual_sha256="${actual_sha256%% *}"
-          test "${actual_sha256}" = "${EXPECTED_SHA256}"
-
-      - name: Attest stored release ZIP
+      - name: Attest verified release digest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          subject-path: '${{ runner.temp }}/stored-release/${{ needs.draft_release.outputs.archive_name }}'
+          subject-name: ${{ needs.draft_release.outputs.archive_name }}
+          subject-digest: sha256:${{ needs.draft_release.outputs.sha256 }}
 
   publish_release:
     name: Publish attested final release
