@@ -209,8 +209,8 @@ jobs:
           --version "$RELEASE_VERSION"
           --manifest blender_manifest.toml
 
-  release:
-    name: Publish verified final release
+  draft_release:
+    name: Build and upload verified draft release
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.release != '' &&
@@ -222,6 +222,12 @@ jobs:
     environment: release
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.release_meta.outputs.tag }}
+      archive_name: ${{ steps.release_meta.outputs.archive_name }}
+      sha256: ${{ steps.release_meta.outputs.sha256 }}
+      release_id: ${{ steps.stored_release.outputs.release_id }}
+      asset_id: ${{ steps.stored_release.outputs.asset_id }}
     defaults:
       run:
         shell: bash
@@ -281,11 +287,19 @@ jobs:
           TAG: ${{ steps.release_meta.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+          tag_refs="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${TAG}")"
+          if ! printf '%s' "${tag_refs}" | jq -e \
+            --arg ref "refs/tags/${TAG}" \
+            '[.[] | select(.ref == $ref)] | length == 0' \
+            >/dev/null; then
             echo "Tag already exists: ${TAG}" >&2
             exit 1
           fi
-          if gh release view "${TAG}" >/dev/null 2>&1; then
+          releases_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate --slurp)"
+          if ! printf '%s' "${releases_json}" | jq -e \
+            --arg tag "${TAG}" \
+            '[.[][] | select(.tag_name == $tag)] | length == 0' \
+            >/dev/null; then
             echo "Release already exists: ${TAG}" >&2
             exit 1
           fi
@@ -310,25 +324,151 @@ jobs:
           '${{ runner.temp }}/release/${{ steps.release_meta.outputs.archive_name }}'
           '${{ runner.temp }}/release/SHA256SUMS.txt'
 
-      - name: Download and verify stored ZIP
+      - name: Verify stored draft release
+        id: stored_release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release_meta.outputs.tag }}
           ARCHIVE_NAME: ${{ steps.release_meta.outputs.archive_name }}
           EXPECTED_SHA256: ${{ steps.release_meta.outputs.sha256 }}
+          EXPECTED_TARGET_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          releases_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate --slurp)"
+          release_id="$(printf '%s' "${releases_json}" | jq -er --arg tag "${TAG}" '[.[][] | select(.draft == true and .tag_name == $tag)] | if length == 1 then .[0].id else error("draft release is missing or duplicated") end')"
+          [[ "${release_id}" =~ ^[0-9]+$ ]]
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}")"
+          asset_id="$(printf '%s' "${release_json}" | jq -er --arg name "${ARCHIVE_NAME}" '[.assets[] | select(.name == $name)] | if length == 1 then .[0].id else error("primary release asset is missing or duplicated") end')"
+          [[ "${asset_id}" =~ ^[0-9]+$ ]]
+          printf '%s' "${release_json}" | jq -e \
+            --arg tag "${TAG}" \
+            --arg target "${EXPECTED_TARGET_SHA}" \
+            --arg name "${ARCHIVE_NAME}" \
+            --arg digest "sha256:${EXPECTED_SHA256}" \
+            --argjson asset_id "${asset_id}" \
+            '.draft == true and .tag_name == $tag and .target_commitish == $target and
+             ([.assets[] | select(.id == $asset_id and .name == $name and .digest == $digest)] | length == 1)' \
+            >/dev/null
           stored_dir='${{ runner.temp }}/stored-release'
           mkdir -p "${stored_dir}"
-          gh release download "${TAG}" \
-            --pattern "${ARCHIVE_NAME}" \
-            --dir "${stored_dir}"
+          gh api -H 'Accept: application/octet-stream' \
+            "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+            > "${stored_dir}/${ARCHIVE_NAME}"
           python scripts/ci.py verify-file \
             --file "${stored_dir}/${ARCHIVE_NAME}" \
             --expected-sha256 "${EXPECTED_SHA256}"
+          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
+          echo "asset_id=${asset_id}" >> "${GITHUB_OUTPUT}"
 
-      - name: Publish verified release
+  attest_release:
+    name: Attest verified release artifact
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release != '' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.visibility == 'public'
+    needs: draft_release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Download and verify exact draft asset
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release_meta.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false
+          TAG: ${{ needs.draft_release.outputs.tag }}
+          ARCHIVE_NAME: ${{ needs.draft_release.outputs.archive_name }}
+          EXPECTED_SHA256: ${{ needs.draft_release.outputs.sha256 }}
+          EXPECTED_TARGET_SHA: ${{ github.sha }}
+          RELEASE_ID: ${{ needs.draft_release.outputs.release_id }}
+          ASSET_ID: ${{ needs.draft_release.outputs.asset_id }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]
+          [[ "${ASSET_ID}" =~ ^[0-9]+$ ]]
+          [[ "${EXPECTED_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          printf '%s' "${release_json}" | jq -e \
+            --arg tag "${TAG}" \
+            --arg target "${EXPECTED_TARGET_SHA}" \
+            --arg name "${ARCHIVE_NAME}" \
+            --arg digest "sha256:${EXPECTED_SHA256}" \
+            --argjson asset_id "${ASSET_ID}" \
+            '.draft == true and .tag_name == $tag and .target_commitish == $target and
+             ([.assets[] | select(.id == $asset_id and .name == $name and .digest == $digest)] | length == 1)' \
+            >/dev/null
+          stored_dir='${{ runner.temp }}/stored-release'
+          mkdir -p "${stored_dir}"
+          stored_path="${stored_dir}/${ARCHIVE_NAME}"
+          gh api -H 'Accept: application/octet-stream' \
+            "repos/${GITHUB_REPOSITORY}/releases/assets/${ASSET_ID}" \
+            > "${stored_path}"
+          actual_sha256="$(sha256sum "${stored_path}")"
+          actual_sha256="${actual_sha256%% *}"
+          test "${actual_sha256}" = "${EXPECTED_SHA256}"
+
+      - name: Attest stored release ZIP
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: '${{ runner.temp }}/stored-release/${{ needs.draft_release.outputs.archive_name }}'
+
+  publish_release:
+    name: Publish attested final release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release != '' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.visibility == 'public'
+    needs: [draft_release, attest_release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Reverify and publish exact draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.draft_release.outputs.tag }}
+          ARCHIVE_NAME: ${{ needs.draft_release.outputs.archive_name }}
+          EXPECTED_SHA256: ${{ needs.draft_release.outputs.sha256 }}
+          EXPECTED_TARGET_SHA: ${{ github.sha }}
+          RELEASE_ID: ${{ needs.draft_release.outputs.release_id }}
+          ASSET_ID: ${{ needs.draft_release.outputs.asset_id }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]
+          [[ "${ASSET_ID}" =~ ^[0-9]+$ ]]
+          [[ "${EXPECTED_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          printf '%s' "${release_json}" | jq -e \
+            --arg tag "${TAG}" \
+            --arg target "${EXPECTED_TARGET_SHA}" \
+            --arg name "${ARCHIVE_NAME}" \
+            --arg digest "sha256:${EXPECTED_SHA256}" \
+            --argjson asset_id "${ASSET_ID}" \
+            '.draft == true and .tag_name == $tag and .target_commitish == $target and
+             ([.assets[] | select(.id == $asset_id and .name == $name and .digest == $digest)] | length == 1)' \
+            >/dev/null
+          stored_dir='${{ runner.temp }}/stored-release'
+          mkdir -p "${stored_dir}"
+          stored_path="${stored_dir}/${ARCHIVE_NAME}"
+          gh api -H 'Accept: application/octet-stream' \
+            "repos/${GITHUB_REPOSITORY}/releases/assets/${ASSET_ID}" \
+            > "${stored_path}"
+          actual_sha256="$(sha256sum "${stored_path}")"
+          actual_sha256="${actual_sha256%% *}"
+          test "${actual_sha256}" = "${EXPECTED_SHA256}"
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false --silent

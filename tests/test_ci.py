@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,28 @@ def load_ci_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def workflow_job(workflow: str, name: str) -> str:
+    match = re.search(
+        rf"^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-z][a-z0-9_]*:\n|\Z)",
+        workflow,
+        re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        raise AssertionError(f"workflow job is missing: {name}")
+    return match.group("body")
+
+
+def job_permissions(block: str) -> set[str]:
+    match = re.search(
+        r"^    permissions:\n(?P<body>(?:^      [a-z-]+: (?:read|write)\n)+)",
+        block,
+        re.MULTILINE,
+    )
+    if match is None:
+        raise AssertionError("job permissions are missing")
+    return {line.strip() for line in match.group("body").splitlines()}
 
 
 class CiPrimitiveTests(unittest.TestCase):
@@ -148,8 +171,6 @@ class WorkflowPolicyTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_actions_are_immutable_and_checkout_drops_credentials(self):
-        import re
-
         refs = re.findall(
             r"^\s*uses:\s*[^@\s]+@([^\s]+)$", self.workflow, re.MULTILINE
         )
@@ -187,18 +208,142 @@ class WorkflowPolicyTests(unittest.TestCase):
             "${{ steps.blender.outputs.python }}' tests/run.py", self.workflow
         )
 
-    def test_release_is_manual_main_only_and_write_scoped(self):
-        self.assertIn("github.event_name == 'workflow_dispatch'", self.workflow)
-        self.assertIn("github.ref == 'refs/heads/main'", self.workflow)
-        self.assertIn(
-            "github.event.repository.visibility == 'public'", self.workflow
+    def test_release_jobs_isolate_write_tokens_from_actions(self):
+        draft = workflow_job(self.workflow, "draft_release")
+        attest = workflow_job(self.workflow, "attest_release")
+        publish = workflow_job(self.workflow, "publish_release")
+
+        self.assertEqual({"contents: write"}, job_permissions(draft))
+        self.assertEqual(
+            {"contents: read", "id-token: write", "attestations: write"},
+            job_permissions(attest),
         )
-        self.assertIn("environment: release", self.workflow)
-        self.assertIn("contents: write", self.workflow)
-        self.assertIn("needs: [validate, release_gate]", self.workflow)
-        self.assertIn("SHA256SUMS.txt", self.workflow)
-        self.assertIn("--draft", self.workflow)
-        self.assertIn("Download and verify stored ZIP", self.workflow)
+        self.assertEqual({"contents: write"}, job_permissions(publish))
+        self.assertNotIn("uses:", draft)
+        self.assertNotIn("uses:", publish)
+        self.assertEqual(
+            ["actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"],
+            re.findall(r"^\s*uses:\s*([^\s]+)$", attest, re.MULTILINE),
+        )
+        self.assertEqual(1, self.workflow.count("id-token: write"))
+        self.assertEqual(1, self.workflow.count("attestations: write"))
+        self.assertEqual(2, self.workflow.count("contents: write"))
+        self.assertIn("environment: release", draft)
+        self.assertNotIn("environment:", attest)
+        self.assertIn("environment: release", publish)
+
+    def test_release_jobs_bind_and_reverify_the_stored_primary_zip(self):
+        draft = workflow_job(self.workflow, "draft_release")
+        attest = workflow_job(self.workflow, "attest_release")
+        publish = workflow_job(self.workflow, "publish_release")
+
+        self.assertIn("needs: [validate, release_gate]", draft)
+        self.assertIn("needs: draft_release", attest)
+        self.assertIn("needs: [draft_release, attest_release]", publish)
+        outputs = re.search(
+            r"^    outputs:\n(?P<body>(?:^      [a-z0-9_]+: .+\n)+)",
+            draft,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(outputs)
+        output_names = set(
+            re.findall(
+                r"^      ([a-z0-9_]+):", outputs.group("body"), re.MULTILINE
+            )
+        )
+        self.assertEqual(
+            {"tag", "archive_name", "sha256", "release_id", "asset_id"},
+            output_names,
+        )
+        for output in (
+            "tag",
+            "archive_name",
+            "sha256",
+            "release_id",
+            "asset_id",
+        ):
+            self.assertIn(f"      {output}: ${{{{ steps.", draft)
+            self.assertIn(f"needs.draft_release.outputs.{output}", attest)
+            self.assertIn(f"needs.draft_release.outputs.{output}", publish)
+        self.assertIn("releases/assets/${ASSET_ID}", attest)
+        self.assertIn("releases/assets/${ASSET_ID}", publish)
+        self.assertIn("sha256sum", attest)
+        self.assertIn("sha256sum", publish)
+        self.assertLess(
+            draft.index('[[ "${release_id}" =~ ^[0-9]+$ ]]'),
+            draft.index("releases/${release_id}"),
+        )
+        self.assertLess(
+            draft.index('[[ "${asset_id}" =~ ^[0-9]+$ ]]'),
+            draft.index("releases/assets/${asset_id}"),
+        )
+        for block in (attest, publish):
+            self.assertLess(
+                block.index('[[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]'),
+                block.index("releases/${RELEASE_ID}"),
+            )
+            self.assertLess(
+                block.index('[[ "${ASSET_ID}" =~ ^[0-9]+$ ]]'),
+                block.index("releases/assets/${ASSET_ID}"),
+            )
+        self.assertIn(
+            "subject-path: '${{ runner.temp }}/stored-release/"
+            "${{ needs.draft_release.outputs.archive_name }}'",
+            attest,
+        )
+        self.assertEqual(1, attest.count("subject-path:"))
+        self.assertNotIn("subject-checksums:", attest)
+        self.assertIn("releases/${RELEASE_ID}", publish)
+        self.assertIn("-F draft=false", publish)
+        self.assertLess(
+            attest.index('test "${actual_sha256}" = "${EXPECTED_SHA256}"'),
+            attest.index("uses: actions/attest@"),
+        )
+        self.assertLess(
+            publish.index('test "${actual_sha256}" = "${EXPECTED_SHA256}"'),
+            publish.index("-F draft=false"),
+        )
+        self.assertNotIn("actions/upload-artifact", draft + attest + publish)
+        self.assertNotIn("actions/download-artifact", draft + attest + publish)
+
+    def test_release_is_manual_public_main_only_and_validation_gated(self):
+        condition_parts = (
+            "github.event_name == 'workflow_dispatch'",
+            "inputs.release != ''",
+            "github.ref == 'refs/heads/main'",
+            "github.event.repository.visibility == 'public'",
+        )
+        draft = workflow_job(self.workflow, "draft_release")
+        attest = workflow_job(self.workflow, "attest_release")
+        publish = workflow_job(self.workflow, "publish_release")
+        for block in (draft, attest, publish):
+            for condition in condition_parts:
+                self.assertIn(condition, block)
+        self.assertIn("needs: [validate, release_gate]", draft)
+        self.assertIn("EXPECTED_SHA: ${{ github.sha }}", draft)
+        self.assertIn(
+            'test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"', draft
+        )
+        self.assertIn("SHA256SUMS.txt", draft)
+        self.assertIn("--draft", draft)
+
+    def test_release_preflight_fails_closed_on_api_errors(self):
+        draft = workflow_job(self.workflow, "draft_release")
+
+        self.assertNotRegex(draft, r"if gh (?:api|release view)")
+        self.assertIn(
+            'tag_refs="$(gh api '
+            '"repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${TAG}")"',
+            draft,
+        )
+        self.assertIn(
+            'releases_json="$(gh api '
+            '"repos/${GITHUB_REPOSITORY}/releases?per_page=100" '
+            '--paginate --slurp)"',
+            draft,
+        )
+        self.assertIn("select(.ref == $ref)] | length == 0", draft)
+        self.assertIn("select(.tag_name == $tag)] | length == 0", draft)
 
 
 class ReleaseCliTests(unittest.TestCase):

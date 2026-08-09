@@ -2,102 +2,121 @@
 
 ## Repository state
 
-- Default/base branch: `main` at `b4e36f7` (PR #1 merged).
-- Active topic branch: `codex/ci-hardening-release`, based on `main` commit
-  `b4e36f7` and published as draft PR #2.
-- `blender-52` remains an older branch at `c1d020f`; it is not the default and
-  is not expected to track `main`.
-- Manifest version: final `5.2.1`; Blender target: `5.2.0 LTS`.
-- The working tree was clean after the implementation commits. Generated test
+- Base/default branch: `origin/main` at
+  `90c1f194dedda1d5657a7b50ceff1a7dce4471cd` after a fresh fetch on
+  2026-08-09.
+- Completed topic branch: `codex/release-attestation-5-2-2`, based directly on
+  that commit. Its production/workflow head is
+  `c11acff3b521a81af43efae0961b666d59441da7`.
+- Draft pull request #3, `Attest CATS 5.2.2 release artifacts`, is open against
+  `main` from this pushed topic branch:
+  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/3`.
+- The latest published release is still `v5.2.1`; no 5.2.2 tag, release, or
+  workflow dispatch was created.
+- The tracked worktree was clean before this handoff update. Generated Blender
   profiles and packages remain ignored under `.test-runtime/` and
   `.packaged-releases/`.
+- The old handoff claims that version 5.2.1 remained checked in and that the
+  implementation plan still awaited approval were stale. Manifest and runtime
+  versions are now synchronized at final version `5.2.2`, and the approved
+  implementation is complete.
 
-## CI hardening branch
+## Completed changes
 
-Objective: secure CI inputs, retain the existing CATS validation gates on
-Windows, Linux, and macOS Apple Silicon, remove unreachable CI-only files, and
-add manual checksum-verified publication for final releases only.
+- `98420ae` — split the release workflow into credential-isolated jobs and add
+  contract tests.
+- `df47752` — synchronize `blender_manifest.toml` and `CATS_VERSION` at 5.2.2
+  and document consumer attestation verification.
+- `c11acff` — make the existing-tag/release preflight fail closed on GitHub API
+  errors and add its regression contract.
 
-Completed commits:
+The release graph is now:
 
-- `63d6e3e` — strict checksum, GitHub-output, and release-identity primitives.
-- `d1f0da7` — verified Blender acquisition with committed archive hashes and
-  byte-identical checksum manifests fetched through normal DNS, Cloudflare DoH,
-  and Quad9 DoT.
-- `2d6da12` — SHA-256-pinned, size-bounded Blender fixtures and
-  `--disable-autoexec` for fixture execution.
-- `2ebda43` — immutable three-platform validation workflow on `windows-2025`,
-  `ubuntu-24.04`, and `macos-15`; no scheduled trigger or `setup-python`.
-- `20a27a2` — optional manual release input, exact final `X.Y.Z` gate, fresh
-  public-source build, draft upload, `SHA256SUMS.txt`, stored-ZIP download and
-  digest verification, then publication.
-- `dc39c4d` — removal of unreferenced `tests/termcolor.py` and three obsolete
-  `tests/old/` probes.
-- `65a8b4f` — repository-backed publication checkpoint replacing stale handoff
-  branch claims.
-- `1a82e5d` — use hosted runner Python only for the two fixture runners so
-  Linux/macOS use the runner CA store; checksum-verified Blender remains the
-  executable under test and every fixture security check remains active.
+1. `draft_release` depends on `validate` and `release_gate`, uses the `release`
+   environment, and has only `contents: write`. It has no `uses:` steps. It
+   fetches and verifies the exact public `main` commit, builds and validates the
+   ZIP, creates a draft, uploads the ZIP and checksum, downloads the stored ZIP
+   by numeric asset ID, verifies the GitHub digest metadata and bytes, and emits
+   only tag, archive name, SHA-256, release ID, and asset ID.
+2. `attest_release` depends on `draft_release`, has exactly `contents: read`,
+   `id-token: write`, and `attestations: write`, and has no environment. It
+   downloads the exact draft asset by numeric ID, independently checks draft
+   identity, target commit, asset name/ID/digest, and bytes, then attests only
+   that ZIP with
+   `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6`.
+3. `publish_release` depends on both earlier jobs, uses the `release`
+   environment, and has only `contents: write`. It has no `uses:` steps. It
+   repeats the exact identity and byte checks before publishing that numeric
+   draft release. An attestation failure therefore leaves the release as a
+   draft.
 
-The workflow keeps global `contents: read`; only the release job receives
-`contents: write` and the `release` environment. Every action reference is a
-full commit SHA and checkout persistence is disabled. Release publication is
-manual, public-`main` only, requires a separate full validation matrix, rejects
-prereleases, and leaves failed drafts available for inspection. There is no
-weekly schedule, automatic release, prerelease, dry-run job, cache, linter,
-reusable workflow, or split-platform package.
+No workflow artifact transfer was added. The stored draft-release asset is the
+handoff between runners. Routine CI artifacts, checksums, source archives,
+caches, and unrelated files are not attested.
 
-## Local verification on 2026-08-08
+Full-SHA pinning limits action-version substitution but does not solve the
+problem of an action receiving a job's `github.token`; actions may access that
+token even when it is not passed explicitly. The security control is the job
+boundary: the attestation action never runs with `contents: write`, and both
+write-token jobs contain only first-party shell commands.
 
-All local Blender commands used isolated profiles under `.test-runtime/`.
+The independent security review initially found that the inherited tag/release
+existence probes treated every `gh` failure as absence. The accepted RED/GREEN
+fix uses successful list queries under `set -euo pipefail`, exact-match `jq -e`
+predicates, and pagination. Authentication, rate-limit, network, server, or
+malformed-response failures now stop before draft creation. Re-review reported
+no remaining Critical or Important findings.
 
-- `python -m unittest tests.test_ci -v`: 21 passed after the CI regression fix.
-- Explicit-path `compileall` over `__init__.py`, `globs.py`, `extentions.py`,
-  `updater.py`, `tools`, `ui`, `extern_tools`, and `tests`: passed.
-- Blender 5.2.0 LTS source validation with `--factory-startup`: passed.
-- `python scripts/build.py --blend <Blender 5.2>`: source validation, build,
-  ZIP validation, and `tests/verify_package.py` passed from clean commit
-  `dc39c4d`.
-- Package:
-  `.packaged-releases/cats_blender_plugin-5.2.1-dc39c4d.zip`.
-- Package SHA-256:
-  `8e10b90dd3465ee06087097597676b5844a1e126f63d3b83bb3f2e07af47fd09`.
-- Package inspection: 183 members, 129 Python modules, and no repository-only,
-  local-reference, runtime-profile, cache, Git, test, docs, or scripts content.
-- The package verifier recorded 1,666 legacy invalid-escape `SyntaxWarning`s;
-  these pre-existing warnings are not package-validation errors.
-- Inline correctness/security review found no Critical or Important issue.
+## Local verification
 
-## GitHub verification
+The following passed on Windows with Blender 5.2 and isolated profiles:
 
-Draft PR: <https://github.com/Alrauna/Cats-Blender-Plugin/pull/2>
+- `python -m unittest tests.test_ci -v` — 24 tests.
+- Explicit-path `compileall` over source and tests.
+- `blender.exe --factory-startup --command extension validate .`.
+- `python scripts/build.py --blend <Blender 5.2>`.
+- Independent `tests/verify_package.py` verification.
+- `git diff --check` and clean tracked status.
 
-The first matrix run `31265264642` proved workflow parsing and passed Windows,
-but Linux and macOS failed when Blender's bundled Python rejected Dropbox's TLS
-chain while fetching retained fixtures. The focused fix restored the prior
-host-Python boundary for only `tests/run.py`; this uses the hosted runner CA
-store without weakening TLS or changing fixture authentication.
+Verified package from production/workflow head `c11acff`:
 
-The complete second run `31265564097` passed:
+- Path:
+  `.packaged-releases/cats_blender_plugin-5.2.2-c11acff.zip`.
+- SHA-256:
+  `0db47b443ab9773e4a1eea3e8e180c653fe1bed0cd4c42345db26572e3b8479f`.
+- Contents: 183 files and 129 Python modules; manifest is Blender 5.2
+  compatible and versioned 5.2.2.
+- Package verification excludes repository-only, local-reference, runtime,
+  cache, and generated material. The ZIP remains ignored and must not be
+  staged.
 
-- Windows (`windows-2025`): passed in 1m49s.
-- Linux (`ubuntu-24.04`): passed in 1m32s.
-- macOS Apple Silicon (`macos-15`): passed in 1m59s.
-- CodeQL Actions and Python analysis: passed.
-- Release gate and publication jobs: correctly skipped for the pull request.
+## Hosted-only checks and operational caveats
 
-## Pending and limitations
+Local tests cannot prove GitHub-hosted behavior for:
 
-- The real release path can only be exercised by a future manual final-version
-  dispatch from public `main` after merge. Do not dispatch a release from this
-  topic branch.
-- The release job's fresh public-source build, draft upload, stored-ZIP
-  verification, and publish transition remain intentionally unexecuted until a
-  future final release is being cut from public `main`.
+- YAML parsing and execution on the Windows 2025 and Ubuntu 24.04 runners.
+- A read-only `GITHUB_TOKEN` downloading the unpublished draft asset by numeric
+  asset ID.
+- OIDC issuance, Sigstore/GitHub attestation persistence, and later
+  `gh attestation verify` behavior.
+- GitHub release API digest population and identity checks in the live run.
+- The failed-attestation path leaving the release draft, followed by successful
+  exact-release publication.
+- Environment approval UX. The `release` environment was re-queried on
+  2026-08-09 and still has `protection_rules: []` and no deployment branch
+  policy. It prompts for no approval today. If reviewers are enabled later,
+  the two write jobs may require two sequential approvals; this is an
+  intentional cost of isolating the attestation action from write credentials.
+
+CATS intentionally differs from AMS by binding and rechecking numeric release
+and asset IDs plus GitHub's stored digest, because CATS creates and publishes a
+draft release in one workflow and does not need a second artifact-transfer
+channel. It also keeps its own version policy and uses 5.2.2, not AMS 1.3.1.
 
 ## Next action
 
-Review and merge draft PR #2 into `main` when ready. After merge, use a manual
-workflow dispatch with an exact manifest-matching final `X.Y.Z` only when an
-actual release is intentionally being cut. Do not publish a release as part of
-branch completion.
+Wait for pull request #3's three-platform validation matrix and CodeQL checks,
+then review the hosted workflow syntax/results and branch diff. Do not dispatch
+`release=5.2.2` during PR validation or merge. After review and merge, an
+authorized maintainer can intentionally dispatch 5.2.2 from public `main` and
+manually verify the draft, attestation, and publication behavior.
