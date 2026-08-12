@@ -271,8 +271,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertIn("releases/assets/${ASSET_ID}", publish)
         self.assertIn("sha256sum", publish)
         self.assertLess(
-            draft.index('[[ "${release_id}" =~ ^[0-9]+$ ]]'),
-            draft.index("releases/${release_id}"),
+            draft.index('[[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]'),
+            draft.index("releases/${RELEASE_ID}"),
         )
         self.assertLess(
             draft.index('[[ "${asset_id}" =~ ^[0-9]+$ ]]'),
@@ -349,7 +349,8 @@ class WorkflowPolicyTests(unittest.TestCase):
             'test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"', draft
         )
         self.assertIn("SHA256SUMS.txt", draft)
-        self.assertIn("--draft", draft)
+        self.assertIn("-F draft=true", draft)
+        self.assertIn("-F generate_release_notes=true", draft)
 
     def test_release_preflight_fails_closed_on_api_errors(self):
         draft = workflow_job(self.workflow, "draft_release")
@@ -368,6 +369,34 @@ class WorkflowPolicyTests(unittest.TestCase):
         )
         self.assertIn("select(.ref == $ref)] | length == 0", draft)
         self.assertIn("select(.tag_name == $tag)] | length == 0", draft)
+
+    def test_draft_verification_uses_the_created_release_id(self):
+        draft = workflow_job(self.workflow, "draft_release")
+        create = draft[
+            draft.index("      - name: Create draft release") :
+            draft.index("      - name: Upload release ZIP and checksum")
+        ]
+        verify = draft[
+            draft.index("      - name: Verify stored draft release") :
+        ]
+
+        self.assertIn("        id: created_release", create)
+        self.assertIn(
+            'release_json="$(gh api --method POST', create
+        )
+        self.assertIn('repos/${GITHUB_REPOSITORY}/releases', create)
+        self.assertIn('.id | if type == "number" and . > 0', create)
+        self.assertIn(
+            'echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"',
+            create,
+        )
+        self.assertIn(
+            "RELEASE_ID: ${{ steps.created_release.outputs.release_id }}",
+            verify,
+        )
+        self.assertIn('[[ "${RELEASE_ID}" =~ ^[0-9]+$ ]]', verify)
+        self.assertIn("releases/${RELEASE_ID}", verify)
+        self.assertNotIn("releases?per_page=100", verify)
 
 
 class ReleaseCliTests(unittest.TestCase):
