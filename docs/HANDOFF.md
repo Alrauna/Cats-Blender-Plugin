@@ -6,8 +6,9 @@
   `cfae36c0e3c1cc635186e2bc97e48964841f52c6`.
 - Active branch: `codex/revise-agent-instructions`, created directly from that
   base for the approved repository-policy revision.
-- The final intended working-tree diff contains only `AGENTS.md` and this
-  handoff. It is not staged or committed.
+- The revision touches only `AGENTS.md` and this handoff. It is committed as
+  `012589b` and published in pull request #6 targeting `main`:
+  `https://github.com/Alrauna/Cats-Blender-Plugin/pull/6`.
 - No source, tests, CI, manifest behavior, package, release state, remote, tag,
   or historical ref was changed.
 - The completed release-lookup work remains separate on
@@ -60,6 +61,5 @@ repository instructions only. No external or subagent review was requested.
 
 ## Next authorized action
 
-Review the uncommitted documentation diff. If it is accepted, the user may
-separately authorize staging and committing it. Pushing or opening a pull
-request remains a separate publication action.
+Await review of pull request #6. Merging it is a separate authorized action;
+no release, tag, or workflow run is implied by this documentation change.
